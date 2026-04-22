@@ -1,0 +1,16 @@
+{
+  "capsule_version": "1.0",
+  "name": "Mortgage Calculator",
+  "slug": "mortgage-calculator",
+  "version": "0.1.0",
+  "description": "Calculate monthly mortgage payments, total interest, and amortization. Offline; requests no capabilities.",
+  "entry": "content/index.html",
+  "author": { "name": "Capsule Examples" },
+  "permissions": [],
+  "network": { "default": "deny", "allow": [] },
+  "privacy": {
+    "summary": "Does not store anything. Does not contact the network.",
+    "data_stored": [],
+    "data_shared": []
+  }
+}

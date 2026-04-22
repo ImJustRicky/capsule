@@ -1,9 +1,12 @@
 import { loadCapsuleFromFile } from "@capsule/core";
 import { createSessionToken, startServer, type RunningServer } from "./server.js";
 import { openInAppWindow } from "./launch.js";
+import { defaultReceiptPath, openReceiptLog } from "./receipts.js";
 
 export * from "./protocol.js";
-export { startServer } from "./server.js";
+export { startServer, createSessionToken } from "./server.js";
+export { defaultReceiptPath, openReceiptLog } from "./receipts.js";
+export type { ReceiptLog, ReceiptRecord } from "./receipts.js";
 export type { CapsuleSession, RunningServer, StartServerOptions } from "./server.js";
 
 export interface RunCapsuleOptions {
@@ -11,6 +14,8 @@ export interface RunCapsuleOptions {
   headless?: boolean;
   /** Explicit port (default: random). */
   port?: number;
+  /** Custom receipt log path. Pass null to disable receipts entirely. */
+  receiptPath?: string | null;
 }
 
 export interface RunCapsuleResult {
@@ -26,11 +31,27 @@ export async function runCapsule(
   const token = createSessionToken();
   const serverOpts: { port?: number } = {};
   if (options.port !== undefined) serverOpts.port = options.port;
+
+  const receipts =
+    options.receiptPath === null
+      ? null
+      : openReceiptLog(options.receiptPath ?? defaultReceiptPath());
+  if (receipts) {
+    await receipts.append({
+      ts: new Date().toISOString(),
+      slug: loaded.manifest.slug,
+      content_hash: loaded.manifest.integrity?.content_hash ?? null,
+      event: "run.start",
+      session: token.slice(0, 6),
+    });
+  }
+
   const server = await startServer(
     {
       manifest: loaded.manifest,
       archive: loaded.archive,
       token,
+      receipts,
     },
     serverOpts,
   );

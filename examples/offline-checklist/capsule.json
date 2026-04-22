@@ -1,0 +1,22 @@
+{
+  "capsule_version": "1.0",
+  "name": "Offline Checklist",
+  "slug": "offline-checklist",
+  "version": "0.1.0",
+  "description": "A simple to-do list that remembers itself. Uses per-capsule private storage. No network.",
+  "entry": "content/index.html",
+  "author": { "name": "Capsule Examples" },
+  "permissions": [
+    {
+      "capability": "storage.local",
+      "scope": "capsule",
+      "reason": "Remember your checklist between sessions."
+    }
+  ],
+  "network": { "default": "deny", "allow": [] },
+  "privacy": {
+    "summary": "Stores your checklist locally, scoped to this capsule only. Does not contact the network.",
+    "data_stored": ["checklist items"],
+    "data_shared": []
+  }
+}

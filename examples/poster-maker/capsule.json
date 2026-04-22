@@ -1,0 +1,27 @@
+{
+  "capsule_version": "1.0",
+  "name": "Poster Maker",
+  "slug": "poster-maker",
+  "version": "0.1.0",
+  "description": "Design a simple poster with text and colors. Export to PNG. Draft is remembered between sessions.",
+  "entry": "content/index.html",
+  "author": { "name": "Capsule Examples" },
+  "permissions": [
+    {
+      "capability": "storage.local",
+      "scope": "capsule",
+      "reason": "Remember your draft between sessions."
+    },
+    {
+      "capability": "filesystem.export",
+      "scope": "user-picked-location",
+      "reason": "Save the poster as a PNG to a location you choose."
+    }
+  ],
+  "network": { "default": "deny", "allow": [] },
+  "privacy": {
+    "summary": "Saves your draft locally. Only exports files where you choose. Does not contact the network.",
+    "data_stored": ["poster draft"],
+    "data_shared": []
+  }
+}

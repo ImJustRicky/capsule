@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Checklist</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Checklist</h1>
+        <span id="count" class="count"></span>
+      </header>
+      <form id="add-form">
+        <input id="new-item" type="text" placeholder="Add an item…" autocomplete="off" maxlength="200" />
+        <button type="submit">Add</button>
+      </form>
+      <ul id="list"></ul>
+      <footer>
+        <button id="clear" class="muted" type="button">Clear all</button>
+        <span class="sub">Saved to this capsule only.</span>
+      </footer>
+    </main>
+  </body>
+</html>

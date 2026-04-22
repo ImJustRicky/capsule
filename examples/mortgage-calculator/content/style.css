@@ -1,0 +1,20 @@
+:root {
+  --bg: #fafafa;
+  --fg: #1a1a1a;
+  --muted: #6b6f76;
+  --accent: #3a3a3a;
+  --border: #e5e5e5;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+main { max-width: 520px; margin: 0 auto; padding: 40px 24px; }
+h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
+.sub { margin: 0 0 28px; color: var(--muted); font-size: 13px; }
+form { display: grid; gap: 12px; margin-bottom: 28px; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+input { font: inherit; font-size: 15px; color: var(--fg); padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: white; }
+input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,0,0,0.05); }
+.result { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: white; }
+.result > div { display: flex; justify-content: space-between; align-items: baseline; }
+.k { color: var(--muted); font-size: 13px; }
+.v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }

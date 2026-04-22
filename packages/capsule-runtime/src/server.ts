@@ -5,22 +5,22 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CapsuleManifest, ReadArchiveResult } from "@capsule/core";
 import { contentTypeFor } from "./mime.js";
+import { connectSrcFromManifest } from "./capabilities.js";
+import type { ReceiptLog, ReceiptRecord } from "./receipts.js";
 
 /**
  * Capsule runtime session.
  *
- * A session binds a single capsule archive to:
+ * A session binds one capsule archive to:
  *   - a random path token (unguessable even from localhost)
- *   - a short-lived HTTP server bound to 127.0.0.1 on a random port
- *   - a strict Content-Security-Policy that blocks network, shell, and
- *     cross-origin access for both the host page and the capsule iframe.
+ *   - a short-lived HTTP server bound to 127.0.0.1
+ *   - a strict CSP that blocks shell, cross-origin, and ambient network access
+ *   - a receipt log for provenance
  *
- * The host page lives at /s/<token>/host.html and renders:
- *   - the Open Screen (manifest inspection, "this capsule can / cannot" list)
- *   - a sandboxed <iframe> that serves the capsule content
- *   - permission prompt modals
- *
- * In V1 Milestone 4 every capability returns `capability.denied`.
+ * In V1 capabilities are granted only after an explicit user confirmation on
+ * the Open Screen's permission modal. The Node server here mediates two extra
+ * surfaces beyond asset serving: a receipt sink and a narrowly-scoped network
+ * proxy for allowlisted hosts.
  */
 
 export interface CapsuleSession {
@@ -28,12 +28,12 @@ export interface CapsuleSession {
   archive: ReadArchiveResult;
   /** Hex string — appears in every URL path for this session. */
   token: string;
+  /** Optional receipt sink. */
+  receipts?: ReceiptLog | null;
 }
 
 export interface StartServerOptions {
-  /** Bind host. Must stay on loopback in V1. */
   host?: string;
-  /** Explicit port, or 0 to pick a free one. */
   port?: number;
 }
 
@@ -45,10 +45,11 @@ export interface RunningServer {
 }
 
 const HOST_ASSET_DIR = resolveHostAssetDir();
+const MAX_POST_BYTES = 10 * 1024 * 1024; // 10 MB — generous for file imports
+const MAX_PROXY_RESPONSE_BYTES = 25 * 1024 * 1024;
 
 function resolveHostAssetDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  // In dev (ts-source) and build (dist), host/ sits next to this file.
   return path.join(here, "host");
 }
 
@@ -58,7 +59,6 @@ export async function startServer(
 ): Promise<RunningServer> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 0;
-  const { token } = session;
 
   const server = http.createServer((req, res) => {
     handle(req, res, session).catch((err) => {
@@ -79,9 +79,9 @@ export async function startServer(
   }
 
   return {
-    url: `http://${host}:${addr.port}/s/${token}/host.html`,
+    url: `http://${host}:${addr.port}/s/${session.token}/host.html`,
     port: addr.port,
-    token,
+    token: session.token,
     close: () =>
       new Promise<void>((resolve, reject) =>
         server.close((err) => (err ? reject(err) : resolve())),
@@ -99,41 +99,44 @@ async function handle(
   session: CapsuleSession,
 ): Promise<void> {
   const url = new URL(req.url ?? "/", "http://localhost");
-  // Only GET and HEAD.
-  if (req.method !== "GET" && req.method !== "HEAD") {
-    res.writeHead(405, { allow: "GET, HEAD" });
-    res.end();
-    return;
-  }
 
   const expectedPrefix = `/s/${session.token}/`;
   if (url.pathname === "/") {
+    if (req.method !== "GET" && req.method !== "HEAD") return respond(res, 405, "");
     res.writeHead(302, { location: `${expectedPrefix}host.html` });
     res.end();
     return;
   }
   if (!url.pathname.startsWith(expectedPrefix)) {
-    res.writeHead(404);
-    res.end();
-    return;
+    return respond(res, 404, "");
   }
   const rest = url.pathname.slice(expectedPrefix.length);
 
-  // Host page + assets.
+  // POST endpoints (host → server).
+  if (req.method === "POST") {
+    if (rest === "receipt") return handleReceipt(req, res, session);
+    if (rest === "proxy") return handleProxy(req, res, session);
+    return respond(res, 404, "");
+  }
+
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.writeHead(405, { allow: "GET, HEAD, POST" });
+    res.end();
+    return;
+  }
+
   if (rest === "host.html") return serveHostPage(res, session);
   if (rest === "session.js") return serveSessionState(res, session);
-  if (rest === "host.js") return serveHostAsset(res, "host.js", false);
-  if (rest === "host.css") return serveHostAsset(res, "host.css", false);
-  if (rest === "bridge.js") return serveHostAsset(res, "bridge.js", true);
+  if (rest === "host.js") return serveHostAsset(res, "host.js");
+  if (rest === "host.css") return serveHostAsset(res, "host.css");
+  if (rest === "bridge.js") return serveHostAsset(res, "bridge.js");
 
-  // Capsule iframe entry.
   if (rest === "capsule/" || rest.startsWith("capsule/")) {
     const inside = rest === "capsule/" ? session.manifest.entry : rest.slice("capsule/".length);
     return serveCapsuleFile(res, session, inside);
   }
 
-  res.writeHead(404);
-  res.end();
+  return respond(res, 404, "");
 }
 
 async function serveHostPage(
@@ -141,9 +144,6 @@ async function serveHostPage(
   session: CapsuleSession,
 ): Promise<void> {
   const body = await fs.readFile(path.join(HOST_ASSET_DIR, "host.html"), "utf8");
-  // Session state is served as an external script (session.js) because the
-  // host CSP bans inline scripts.
-  void session;
 
   const csp = [
     "default-src 'none'",
@@ -151,8 +151,8 @@ async function serveHostPage(
     "style-src 'self'",
     "img-src 'self' data:",
     "font-src 'self' data:",
-    "connect-src 'none'",
-    // The capsule iframe is same-origin but sandboxed; we still restrict it.
+    // Host must be able to call its own endpoints (receipt + proxy).
+    "connect-src 'self'",
     "frame-src 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",
@@ -180,20 +180,13 @@ function serveSessionState(res: http.ServerResponse, session: CapsuleSession): v
   res.end(body);
 }
 
-async function serveHostAsset(
-  res: http.ServerResponse,
-  name: string,
-  forIframe: boolean,
-): Promise<void> {
+async function serveHostAsset(res: http.ServerResponse, name: string): Promise<void> {
   const filePath = path.join(HOST_ASSET_DIR, name);
   const bytes = await fs.readFile(filePath);
   res.writeHead(200, {
     "content-type": contentTypeFor(name),
     "x-content-type-options": "nosniff",
     "cache-control": "no-store",
-    // bridge.js executes inside the sandboxed iframe; the iframe's CSP is set
-    // per-response in serveCapsuleFile.
-    ...(forIframe ? {} : {}),
   });
   res.end(bytes);
 }
@@ -204,17 +197,14 @@ async function serveCapsuleFile(
   relPath: string,
 ): Promise<void> {
   const entry = session.archive.byPath.get(relPath);
-  if (!entry || entry.isDirectory) {
-    res.writeHead(404);
-    res.end();
-    return;
-  }
+  if (!entry || entry.isDirectory) return respond(res, 404, "");
   const ct = contentTypeFor(relPath);
   const isHtml = ct.startsWith("text/html");
 
+  // Capsule iframe CSP. connect-src is 'none' by design — the capsule never
+  // talks to the network directly; it always goes through the host bridge.
   const baseCsp = [
     "default-src 'none'",
-    // capsule scripts are self-hosted by the runtime (same origin), inline not allowed
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
@@ -226,9 +216,7 @@ async function serveCapsuleFile(
     "form-action 'none'",
   ].join("; ");
 
-  const bytes = isHtml
-    ? injectBridgeScript(entry.bytes, session.token)
-    : entry.bytes;
+  const bytes = isHtml ? injectBridgeScript(entry.bytes, session.token) : entry.bytes;
 
   res.writeHead(200, {
     "content-type": ct,
@@ -244,8 +232,154 @@ async function serveCapsuleFile(
 function injectBridgeScript(html: Uint8Array, token: string): Buffer {
   const text = new TextDecoder("utf-8").decode(html);
   const tag = `<script src="/s/${token}/bridge.js"></script>`;
-  // Inject before </head> if present, else prepend.
   const idx = text.toLowerCase().indexOf("</head>");
   const out = idx >= 0 ? text.slice(0, idx) + tag + text.slice(idx) : tag + text;
   return Buffer.from(out, "utf-8");
 }
+
+// ---------- POST: receipt sink ----------
+
+async function handleReceipt(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  session: CapsuleSession,
+): Promise<void> {
+  const body = await readBody(req);
+  if (!body) return respond(res, 400, "empty");
+  let parsed: Partial<ReceiptRecord>;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(body)) as Partial<ReceiptRecord>;
+  } catch {
+    return respond(res, 400, "bad json");
+  }
+  if (!session.receipts) return respond(res, 204, "");
+  const record: ReceiptRecord = {
+    ts: new Date().toISOString(),
+    slug: session.manifest.slug,
+    content_hash: session.manifest.integrity?.content_hash ?? null,
+    event: parsed.event ?? "request",
+    session: session.token.slice(0, 6),
+    ...(parsed.capability ? { capability: parsed.capability } : {}),
+    ...(parsed.method ? { method: parsed.method } : {}),
+    ...(parsed.scope !== undefined ? { scope: parsed.scope } : {}),
+    ...(parsed.detail ? { detail: parsed.detail } : {}),
+  };
+  await session.receipts.append(record);
+  return respond(res, 204, "");
+}
+
+// ---------- POST: network proxy ----------
+
+async function handleProxy(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  session: CapsuleSession,
+): Promise<void> {
+  const body = await readBody(req);
+  if (!body) return respond(res, 400, "empty");
+  let parsed: { url?: string; method?: string; headers?: Record<string, string>; body?: string };
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    return respond(res, 400, "bad json");
+  }
+  if (!parsed.url) return respond(res, 400, "missing url");
+
+  let target: URL;
+  try {
+    target = new URL(parsed.url);
+  } catch {
+    return respond(res, 400, "invalid url");
+  }
+  if (target.protocol !== "https:" && target.protocol !== "http:") {
+    return respond(res, 400, "only http(s) allowed");
+  }
+  if (!hostAllowed(session.manifest.network.allow, target.host)) {
+    return respond(res, 403, "host not in allowlist");
+  }
+
+  // Strip risky forwarded headers. The capsule should never be able to set
+  // Cookie, Authorization, Host, etc. via the proxy.
+  const outgoingHeaders: Record<string, string> = {};
+  if (parsed.headers) {
+    for (const [k, v] of Object.entries(parsed.headers)) {
+      const lk = k.toLowerCase();
+      if (
+        lk === "cookie" ||
+        lk === "authorization" ||
+        lk === "host" ||
+        lk === "content-length" ||
+        lk.startsWith("sec-") ||
+        lk.startsWith("proxy-")
+      ) {
+        continue;
+      }
+      outgoingHeaders[k] = String(v);
+    }
+  }
+  outgoingHeaders["user-agent"] = "capsule-runtime/0.1";
+
+  let upstream: Response;
+  try {
+    const init: RequestInit = {
+      method: parsed.method ?? "GET",
+      headers: outgoingHeaders,
+      redirect: "follow",
+    };
+    if (parsed.body !== undefined) init.body = parsed.body;
+    upstream = await fetch(target.toString(), init);
+  } catch (err) {
+    return respond(res, 502, `upstream error: ${(err as Error).message}`);
+  }
+
+  const buf = Buffer.from(await upstream.arrayBuffer());
+  if (buf.byteLength > MAX_PROXY_RESPONSE_BYTES) {
+    return respond(res, 502, "upstream response too large");
+  }
+
+  // Forward a minimal, safe subset of headers.
+  const forwarded: Record<string, string> = { "content-type": "application/json" };
+  const ct = upstream.headers.get("content-type");
+  const outgoingResponse = {
+    status: upstream.status,
+    ok: upstream.ok,
+    headers: { "content-type": ct ?? "application/octet-stream" },
+    body_b64: buf.toString("base64"),
+  };
+  res.writeHead(200, forwarded);
+  res.end(JSON.stringify(outgoingResponse));
+}
+
+function hostAllowed(allow: readonly string[], host: string): boolean {
+  // allow is matched against exact host[:port]. No wildcards in V1.
+  return allow.includes(host);
+}
+
+// ---------- helpers ----------
+
+function readBody(req: http.IncomingMessage): Promise<Buffer | null> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    req.on("data", (c: Buffer) => {
+      total += c.byteLength;
+      if (total > MAX_POST_BYTES) {
+        req.destroy();
+        return resolve(null);
+      }
+      chunks.push(c);
+    });
+    req.on("end", () => resolve(chunks.length > 0 ? Buffer.concat(chunks) : Buffer.alloc(0)));
+    req.on("error", reject);
+  });
+}
+
+function respond(res: http.ServerResponse, status: number, text: string): void {
+  if (!res.headersSent) {
+    res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+  }
+  res.end(text);
+}
+
+// Re-exported helpers for host-page CSP decisions.
+export { connectSrcFromManifest };

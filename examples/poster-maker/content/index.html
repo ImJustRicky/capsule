@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Poster Maker</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Poster maker</h1>
+        <button id="export" type="button">Export PNG</button>
+      </header>
+      <section class="grid">
+        <form id="form">
+          <label>Title <input id="title" type="text" value="Summer Sale" maxlength="60" /></label>
+          <label>Subtitle <input id="subtitle" type="text" value="Everything must go" maxlength="80" /></label>
+          <label>Footer <input id="footer" type="text" value="June 10 · Main Street" maxlength="80" /></label>
+          <label>Background <input id="bg" type="color" value="#0f1830" /></label>
+          <label>Text color <input id="fg" type="color" value="#f5e9c1" /></label>
+          <label>Accent <input id="accent" type="color" value="#e6a23c" /></label>
+        </form>
+        <canvas id="poster" width="720" height="960" aria-label="Poster preview"></canvas>
+      </section>
+    </main>
+  </body>
+</html>

@@ -20,9 +20,9 @@ const baseManifest = {
   network: { default: "deny" as const, allow: [] },
 };
 
-async function buildSession() {
+async function buildSession(overrides: Record<string, unknown> = {}) {
   const files: PackFile[] = [
-    { path: "capsule.json", bytes: enc.encode(JSON.stringify(baseManifest)) },
+    { path: "capsule.json", bytes: enc.encode(JSON.stringify({ ...baseManifest, ...overrides })) },
     { path: "content/index.html", bytes: enc.encode("<!doctype html><html><head></head><body>hi</body></html>") },
     { path: "content/app.js", bytes: enc.encode("console.log('capsule');") },
   ];
@@ -60,8 +60,9 @@ describe("runtime server", () => {
     expect(r.headers.get("content-type")).toMatch(/text\/html/);
     const csp = r.headers.get("content-security-policy") ?? "";
     expect(csp).toMatch(/default-src 'none'/);
-    expect(csp).toMatch(/connect-src 'none'/);
-    // Host page references external session.js.
+    // Host page may call its own receipt + proxy endpoints; the capsule
+    // iframe's CSP (asserted below) is what must deny external connects.
+    expect(csp).toMatch(/connect-src 'self'/);
     expect(r.body).toContain("session.js");
   });
 
@@ -139,6 +140,77 @@ describe("runtime server", () => {
     expect(bridge.status).toBe(200);
     expect(bridge.body).toContain("capsule-request");
     expect(bridge.body).toContain("window.capsule");
+  });
+});
+
+describe("POST /receipt", () => {
+  it("appends a record to the receipt log when one is configured", async () => {
+    const session = await buildSession();
+    const log: { records: unknown[] } = { records: [] };
+    const receipts = {
+      path: "(memory)",
+      async append(rec: unknown) {
+        log.records.push(rec);
+      },
+      async read() {
+        return [] as never;
+      },
+    };
+    server = await startServer({ ...session, receipts });
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/receipt`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ event: "grant", capability: "storage.local", method: "set" }),
+      },
+    );
+    expect(r.status).toBe(204);
+    expect(log.records.length).toBe(1);
+    const rec = log.records[0] as { event: string; capability: string; slug: string };
+    expect(rec.event).toBe("grant");
+    expect(rec.capability).toBe("storage.local");
+    expect(rec.slug).toBe(session.manifest.slug);
+  });
+});
+
+describe("POST /proxy network allowlist", () => {
+  it("rejects hosts not in manifest.network.allow with 403", async () => {
+    const session = await buildSession({ network: { default: "deny", allow: [] } });
+    server = await startServer(session);
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/proxy`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/" }),
+      },
+    );
+    expect(r.status).toBe(403);
+  });
+
+  it("rejects non-http(s) schemes with 400", async () => {
+    const session = await buildSession({ network: { default: "deny", allow: ["example.com"] } });
+    server = await startServer(session);
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/proxy`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "file:///etc/passwd" }),
+      },
+    );
+    expect(r.status).toBe(400);
+  });
+
+  it("rejects malformed JSON with 400", async () => {
+    const session = await buildSession();
+    server = await startServer(session);
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/proxy`,
+      { method: "POST", headers: { "content-type": "application/json" }, body: "{not json" },
+    );
+    expect(r.status).toBe(400);
   });
 });
 
