@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Test / tooling caches
+coverage/
+.vitest-cache/
+.eslintcache
+.turbo/
+.cache/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local environment
+.env
+.env.local
+.env.*.local
+
+# Temporary / scratch
+.tmp/
+tmp/
+scratch/
+*.capsule
+
+# Local runtime state / receipts
+.capsule-local/
+receipts-local/
+
+# Generated smoke/playground directories
+/playground/
