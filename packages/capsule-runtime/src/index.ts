@@ -51,6 +51,7 @@ export async function runCapsule(
       manifest: loaded.manifest,
       archive: loaded.archive,
       token,
+      contentHash: loaded.integrity.actual,
       receipts,
     },
     serverOpts,

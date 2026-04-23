@@ -63,6 +63,8 @@ describe("runtime server", () => {
     // Host page may call its own receipt + proxy endpoints; the capsule
     // iframe's CSP (asserted below) is what must deny external connects.
     expect(csp).toMatch(/connect-src 'self'/);
+    expect(csp).toMatch(/object-src 'none'/);
+    expect(csp).toMatch(/worker-src 'none'/);
     expect(r.body).toContain("session.js");
   });
 
@@ -77,6 +79,7 @@ describe("runtime server", () => {
     expect(r.body).toContain("window.__CAPSULE__");
     expect(r.body).toContain('"slug":"runtime-test"');
     expect(r.body).toContain(session.token);
+    expect(r.body).toMatch(/"content_hash":"sha256:[a-f0-9]{64}"/);
   });
 
   it("redirects / to the host page", async () => {
@@ -107,6 +110,8 @@ describe("runtime server", () => {
     const csp = r.headers.get("content-security-policy") ?? "";
     expect(csp).toMatch(/connect-src 'none'/);
     expect(csp).toMatch(/default-src 'none'/);
+    expect(csp).toMatch(/frame-src 'none'/);
+    expect(csp).toMatch(/object-src 'none'/);
     expect(r.body).toContain(`/s/${session.token}/bridge.js`);
   });
 
@@ -175,6 +180,41 @@ describe("POST /receipt", () => {
 });
 
 describe("POST /proxy network allowlist", () => {
+  it("rejects unsupported methods before policy checks", async () => {
+    const session = await buildSession();
+    server = await startServer(session);
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/proxy`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/", method: "TRACE" }),
+      },
+    );
+    expect(r.status).toBe(400);
+    expect(await r.text()).toMatch(/unsupported method/);
+  });
+
+  it("requires HTTPS targets", async () => {
+    const session = await buildSession({
+      permissions: [
+        { capability: "network.fetch", scope: ["example.com"], reason: "test" },
+      ],
+      network: { default: "deny", allow: ["example.com"] },
+    });
+    server = await startServer(session);
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/proxy`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "http://example.com/" }),
+      },
+    );
+    expect(r.status).toBe(400);
+    expect(await r.text()).toMatch(/only https/);
+  });
+
   it("rejects hosts not in manifest.network.allow with 403", async () => {
     const session = await buildSession({ network: { default: "deny", allow: [] } });
     server = await startServer(session);
@@ -187,6 +227,57 @@ describe("POST /proxy network allowlist", () => {
       },
     );
     expect(r.status).toBe(403);
+  });
+
+  it("requires a declared network.fetch permission", async () => {
+    const session = await buildSession({ network: { default: "deny", allow: ["example.com"] } });
+    server = await startServer(session);
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/proxy`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/" }),
+      },
+    );
+    expect(r.status).toBe(403);
+    expect(await r.text()).toMatch(/not declared/);
+  });
+
+  it("requires network.fetch scope to cover the target host", async () => {
+    const session = await buildSession({
+      permissions: [{ capability: "network.fetch", scope: ["api.example.com"], reason: "test" }],
+      network: { default: "deny", allow: ["example.com"] },
+    });
+    server = await startServer(session);
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/proxy`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://example.com/" }),
+      },
+    );
+    expect(r.status).toBe(403);
+    expect(await r.text()).toMatch(/scope/);
+  });
+
+  it("blocks local and private network targets even when declared", async () => {
+    const session = await buildSession({
+      permissions: [{ capability: "network.fetch", scope: ["127.0.0.1"], reason: "test" }],
+      network: { default: "deny", allow: ["127.0.0.1"] },
+    });
+    server = await startServer(session);
+    const r = await fetch(
+      `http://127.0.0.1:${server.port}/s/${session.token}/proxy`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: "https://127.0.0.1/" }),
+      },
+    );
+    expect(r.status).toBe(403);
+    expect(await r.text()).toMatch(/private network/);
   });
 
   it("rejects non-http(s) schemes with 400", async () => {
@@ -222,4 +313,3 @@ describe("session token", () => {
     expect(a).toMatch(/^[a-f0-9]{48}$/);
   });
 });
-

@@ -60,4 +60,13 @@ describe("packArchive", () => {
     const archive = await readArchiveFromBuffer(Buffer.from(res.bytes));
     expect(computeContentHash(archive)).toBe(res.contentHash);
   });
+
+  it("rejects duplicate input paths", async () => {
+    await expect(
+      packArchive([
+        ...baseFiles(),
+        { path: "content/index.html", bytes: enc.encode("<h1>duplicate</h1>") },
+      ]),
+    ).rejects.toThrow(/duplicate path/);
+  });
 });

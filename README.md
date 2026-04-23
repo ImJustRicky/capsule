@@ -41,13 +41,11 @@ Full details: [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md).
 pnpm install
 pnpm -r build
 
-# scaffold a capsule project
-node packages/capsule-cli/bin/capsule.mjs create hello
+# easiest path: make a capsule from a starter template
+node packages/capsule-cli/bin/capsule.mjs make hello --template checklist
 
-# edit hello/content/index.html
-
-# pack it into a shareable file
-node packages/capsule-cli/bin/capsule.mjs pack hello
+# or package an existing folder with index.html
+node packages/capsule-cli/bin/capsule.mjs make ./my-site --name "My Site"
 
 # inspect it (no execution)
 node packages/capsule-cli/bin/capsule.mjs inspect hello.capsule
@@ -97,6 +95,20 @@ pnpm -r typecheck   # tsc --noEmit across all packages
 ```
 
 Tests, type checks, and builds all run in CI on Ubuntu and macOS against Node 20 and 22. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+## Making Capsules
+
+For most authors, start with `capsule make`. It creates a template project when
+the path does not exist, or packages an existing web folder when it does.
+
+```bash
+capsule make my-checklist --template checklist
+capsule make ./dist --name "Interactive Report"
+capsule make --list-templates
+```
+
+Use `capsule pack` when you already have a complete Capsule project with an
+authored `capsule.json` and want strict deterministic packaging.
 
 ## Status
 

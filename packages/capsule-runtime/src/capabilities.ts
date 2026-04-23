@@ -53,10 +53,11 @@ export class CapabilityMediator {
    */
   scopeCovers(declaration: PermissionRequest, requestedScope: string | null): boolean {
     if (requestedScope === null) return true;
+    const requested = normalizeHost(requestedScope);
     const declared = declaration.scope;
-    if (Array.isArray(declared)) return declared.includes(requestedScope);
+    if (Array.isArray(declared)) return declared.some((scope) => normalizeHost(scope) === requested);
     if (declared === "*" || declared === "any") return true;
-    return declared === requestedScope;
+    return normalizeHost(declared) === requested;
   }
 }
 
@@ -67,6 +68,10 @@ export class CapabilityMediator {
  */
 export function connectSrcFromManifest(manifest: CapsuleManifest): string {
   if (!manifest.network.allow.length) return "'none'";
-  const origins = manifest.network.allow.map((h) => `https://${h}`).join(" ");
+  const origins = manifest.network.allow.map((h) => `https://${normalizeHost(h)}`).join(" ");
   return `'self' ${origins}`;
+}
+
+function normalizeHost(host: string): string {
+  return host.toLowerCase().replace(/\.$/, "");
 }

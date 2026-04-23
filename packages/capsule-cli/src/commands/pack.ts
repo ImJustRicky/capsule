@@ -20,6 +20,10 @@ export async function pack(argv: string[]): Promise<number> {
   const result = await packArchive(files);
 
   const outPath = out ?? `${result.manifest.slug}.capsule`;
+  if (!outPath.toLowerCase().endsWith(".capsule")) {
+    process.stderr.write("output path must use the standard .capsule extension\n");
+    return 1;
+  }
   await fs.writeFile(outPath, result.bytes);
   process.stdout.write(`packed ${outPath}\n  content_hash: ${result.contentHash}\n  size: ${result.bytes.byteLength} bytes\n`);
   return 0;

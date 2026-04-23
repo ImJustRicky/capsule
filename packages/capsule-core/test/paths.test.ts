@@ -19,6 +19,14 @@ describe("validateArchivePath", () => {
     expect(() => validateArchivePath("content/../escape")).toThrow(/traversal|\.\./);
   });
 
+  it("rejects empty path segments", () => {
+    expect(() => validateArchivePath("content//index.html")).toThrow(/empty segment/);
+  });
+
+  it("rejects dot path segments", () => {
+    expect(() => validateArchivePath("content/./index.html")).toThrow(/\./);
+  });
+
   it("rejects backslashes", () => {
     expect(() => validateArchivePath("content\\x.html")).toThrow(/forward slashes/);
   });

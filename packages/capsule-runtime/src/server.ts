@@ -1,6 +1,8 @@
 import http from "node:http";
 import { randomBytes } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import { promises as fs } from "node:fs";
+import { isIP } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CapsuleManifest, ReadArchiveResult } from "@capsule/core";
@@ -28,6 +30,8 @@ export interface CapsuleSession {
   archive: ReadArchiveResult;
   /** Hex string — appears in every URL path for this session. */
   token: string;
+  /** Runtime-computed canonical content hash, even when not declared. */
+  contentHash?: string | null;
   /** Optional receipt sink. */
   receipts?: ReceiptLog | null;
 }
@@ -47,6 +51,8 @@ export interface RunningServer {
 const HOST_ASSET_DIR = resolveHostAssetDir();
 const MAX_POST_BYTES = 10 * 1024 * 1024; // 10 MB — generous for file imports
 const MAX_PROXY_RESPONSE_BYTES = 25 * 1024 * 1024;
+const MAX_PROXY_REDIRECTS = 5;
+const PROXY_METHODS = new Set(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"]);
 
 function resolveHostAssetDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -154,6 +160,8 @@ async function serveHostPage(
     // Host must be able to call its own endpoints (receipt + proxy).
     "connect-src 'self'",
     "frame-src 'self'",
+    "worker-src 'none'",
+    "object-src 'none'",
     "frame-ancestors 'none'",
     "base-uri 'none'",
     "form-action 'none'",
@@ -171,7 +179,9 @@ async function serveHostPage(
 function serveSessionState(res: http.ServerResponse, session: CapsuleSession): void {
   const body = `window.__CAPSULE__ = Object.freeze({ manifest: ${JSON.stringify(
     session.manifest,
-  )}, token: ${JSON.stringify(session.token)} });\n`;
+  )}, token: ${JSON.stringify(session.token)}, content_hash: ${JSON.stringify(
+    session.contentHash ?? session.manifest.integrity?.content_hash ?? null,
+  )} });\n`;
   res.writeHead(200, {
     "content-type": "text/javascript; charset=utf-8",
     "x-content-type-options": "nosniff",
@@ -211,6 +221,9 @@ async function serveCapsuleFile(
     "media-src 'self' data: blob:",
     "font-src 'self' data: blob:",
     "connect-src 'none'",
+    "worker-src 'none'",
+    "frame-src 'none'",
+    "object-src 'none'",
     "frame-ancestors 'self'",
     "base-uri 'self'",
     "form-action 'none'",
@@ -277,7 +290,7 @@ async function handleProxy(
 ): Promise<void> {
   const body = await readBody(req);
   if (!body) return respond(res, 400, "empty");
-  let parsed: { url?: string; method?: string; headers?: Record<string, string>; body?: string };
+  let parsed: { url?: string; method?: string; headers?: unknown; body?: unknown };
   try {
     parsed = JSON.parse(new TextDecoder().decode(body));
   } catch {
@@ -291,50 +304,51 @@ async function handleProxy(
   } catch {
     return respond(res, 400, "invalid url");
   }
-  if (target.protocol !== "https:" && target.protocol !== "http:") {
-    return respond(res, 400, "only http(s) allowed");
+
+  const method = normalizeProxyMethod(parsed.method);
+  if (!method) return respond(res, 400, "unsupported method");
+  if ((method === "GET" || method === "HEAD") && parsed.body !== undefined) {
+    return respond(res, 400, `${method} requests cannot include a body`);
   }
-  if (!hostAllowed(session.manifest.network.allow, target.host)) {
-    return respond(res, 403, "host not in allowlist");
+  if (parsed.body !== undefined && typeof parsed.body !== "string") {
+    return respond(res, 400, "body must be a string");
   }
 
-  // Strip risky forwarded headers. The capsule should never be able to set
-  // Cookie, Authorization, Host, etc. via the proxy.
-  const outgoingHeaders: Record<string, string> = {};
-  if (parsed.headers) {
-    for (const [k, v] of Object.entries(parsed.headers)) {
-      const lk = k.toLowerCase();
-      if (
-        lk === "cookie" ||
-        lk === "authorization" ||
-        lk === "host" ||
-        lk === "content-length" ||
-        lk.startsWith("sec-") ||
-        lk.startsWith("proxy-")
-      ) {
-        continue;
-      }
-      outgoingHeaders[k] = String(v);
-    }
+  try {
+    await ensureProxyTargetAllowed(session, target);
+  } catch (err) {
+    if (err instanceof ProxyReject) return respond(res, err.status, err.message);
+    throw err;
   }
+
+  let outgoingHeaders: Record<string, string>;
+  try {
+    outgoingHeaders = sanitizeProxyHeaders(parsed.headers);
+  } catch (err) {
+    return respond(res, 400, (err as Error).message);
+  }
+
   outgoingHeaders["user-agent"] = "capsule-runtime/0.1";
 
   let upstream: Response;
   try {
     const init: RequestInit = {
-      method: parsed.method ?? "GET",
+      method,
       headers: outgoingHeaders,
-      redirect: "follow",
     };
-    if (parsed.body !== undefined) init.body = parsed.body;
-    upstream = await fetch(target.toString(), init);
+    if (parsed.body !== undefined) init.body = parsed.body as string;
+    upstream = await fetchAllowlisted(session, target, init);
   } catch (err) {
+    if (err instanceof ProxyReject) return respond(res, err.status, err.message);
     return respond(res, 502, `upstream error: ${(err as Error).message}`);
   }
 
-  const buf = Buffer.from(await upstream.arrayBuffer());
-  if (buf.byteLength > MAX_PROXY_RESPONSE_BYTES) {
-    return respond(res, 502, "upstream response too large");
+  let buf: Buffer;
+  try {
+    buf = await readResponseBytes(upstream, MAX_PROXY_RESPONSE_BYTES);
+  } catch (err) {
+    if (err instanceof ProxyReject) return respond(res, err.status, err.message);
+    return respond(res, 502, `upstream error: ${(err as Error).message}`);
   }
 
   // Forward a minimal, safe subset of headers.
@@ -350,9 +364,207 @@ async function handleProxy(
   res.end(JSON.stringify(outgoingResponse));
 }
 
+class ProxyReject extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ProxyReject";
+    this.status = status;
+  }
+}
+
+function normalizeProxyMethod(raw: unknown): string | null {
+  const method = String(raw ?? "GET").toUpperCase();
+  return PROXY_METHODS.has(method) ? method : null;
+}
+
+function sanitizeProxyHeaders(input: unknown): Record<string, string> {
+  if (input === undefined || input === null) return {};
+  if (typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("headers must be an object");
+  }
+
+  const outgoingHeaders: Record<string, string> = {};
+  for (const [k, v] of Object.entries(input)) {
+    if (typeof k !== "string" || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(k)) {
+      throw new Error(`invalid header name: ${k}`);
+    }
+    if (typeof v !== "string") {
+      throw new Error(`header value must be a string: ${k}`);
+    }
+    const lk = k.toLowerCase();
+    if (
+      lk === "cookie" ||
+      lk === "authorization" ||
+      lk === "host" ||
+      lk === "content-length" ||
+      lk.startsWith("sec-") ||
+      lk.startsWith("proxy-")
+    ) {
+      continue;
+    }
+    outgoingHeaders[k] = v;
+  }
+  return outgoingHeaders;
+}
+
+async function fetchAllowlisted(
+  session: CapsuleSession,
+  start: URL,
+  init: RequestInit,
+): Promise<Response> {
+  let current = start;
+  for (let redirects = 0; redirects <= MAX_PROXY_REDIRECTS; redirects++) {
+    await ensureProxyTargetAllowed(session, current);
+    const upstream = await fetch(current.toString(), {
+      ...init,
+      redirect: "manual",
+    });
+    if (!isRedirect(upstream.status)) return upstream;
+
+    const location = upstream.headers.get("location");
+    if (!location) return upstream;
+    if (redirects === MAX_PROXY_REDIRECTS) {
+      throw new ProxyReject(502, "too many redirects");
+    }
+    current = new URL(location, current);
+  }
+  throw new ProxyReject(502, "too many redirects");
+}
+
+function isRedirect(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+async function ensureProxyTargetAllowed(session: CapsuleSession, target: URL): Promise<void> {
+  if (target.protocol !== "https:") {
+    throw new ProxyReject(400, "only https allowed");
+  }
+  if (!hostAllowed(session.manifest.network.allow, target.host)) {
+    throw new ProxyReject(403, "host not in network allowlist");
+  }
+  const declaration = session.manifest.permissions.find((p) => p.capability === "network.fetch");
+  if (!declaration) {
+    throw new ProxyReject(403, "network.fetch not declared");
+  }
+  if (!scopeCoversNetwork(declaration.scope, target.host)) {
+    throw new ProxyReject(403, "host not in network.fetch scope");
+  }
+  await rejectUnsafeNetworkHost(target.hostname);
+}
+
 function hostAllowed(allow: readonly string[], host: string): boolean {
   // allow is matched against exact host[:port]. No wildcards in V1.
-  return allow.includes(host);
+  const normalized = normalizeHost(host);
+  return allow.some((h) => normalizeHost(h) === normalized);
+}
+
+function scopeCoversNetwork(scope: string | readonly string[], host: string): boolean {
+  const normalized = normalizeHost(host);
+  if (typeof scope === "string") {
+    if (scope === "*" || scope === "any") return true;
+    return normalizeHost(scope) === normalized;
+  }
+  return scope.some((h) => normalizeHost(h) === normalized);
+}
+
+async function rejectUnsafeNetworkHost(hostname: string): Promise<void> {
+  const host = normalizeHostname(hostname);
+  if (isUnsafeHostname(host)) {
+    throw new ProxyReject(403, "local and private network hosts are blocked");
+  }
+
+  let addresses: { address: string }[];
+  try {
+    addresses = await lookup(host, { all: true, verbatim: false });
+  } catch (err) {
+    throw new ProxyReject(502, `dns lookup failed: ${(err as Error).message}`);
+  }
+  if (addresses.some((addr) => isUnsafeIp(addr.address))) {
+    throw new ProxyReject(403, "local and private network addresses are blocked");
+  }
+}
+
+function normalizeHost(host: string): string {
+  return host.toLowerCase().replace(/\.$/, "");
+}
+
+function normalizeHostname(hostname: string): string {
+  return normalizeHost(hostname).replace(/^\[/, "").replace(/\]$/, "");
+}
+
+function isUnsafeHostname(hostname: string): boolean {
+  if (
+    hostname === "localhost" ||
+    hostname.endsWith(".localhost") ||
+    hostname.endsWith(".local")
+  ) {
+    return true;
+  }
+  return isUnsafeIp(hostname);
+}
+
+function isUnsafeIp(address: string): boolean {
+  const normalized = normalizeHostname(address);
+  const family = isIP(normalized);
+  if (family === 4) return isUnsafeIpv4(normalized);
+  if (family === 6) return isUnsafeIpv6(normalized);
+  return false;
+}
+
+function isUnsafeIpv4(address: string): boolean {
+  const parts = address.split(".").map((p) => Number(p));
+  const [a = 0, b = 0] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
+}
+
+function isUnsafeIpv6(address: string): boolean {
+  const lower = address.toLowerCase();
+  if (lower.startsWith("::ffff:")) {
+    return isUnsafeIpv4(lower.slice("::ffff:".length));
+  }
+  return (
+    lower === "::" ||
+    lower === "::1" ||
+    lower.startsWith("fc") ||
+    lower.startsWith("fd") ||
+    lower.startsWith("fe8") ||
+    lower.startsWith("fe9") ||
+    lower.startsWith("fea") ||
+    lower.startsWith("feb") ||
+    lower.startsWith("ff")
+  );
+}
+
+async function readResponseBytes(response: Response, maxBytes: number): Promise<Buffer> {
+  if (!response.body) return Buffer.alloc(0);
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = Buffer.from(value);
+    total += chunk.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined);
+      throw new ProxyReject(502, "upstream response too large");
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 // ---------- helpers ----------

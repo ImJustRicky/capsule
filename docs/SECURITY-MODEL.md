@@ -111,6 +111,8 @@ When `network.fetch` is granted:
 
 - runtime enforces host allowlist
 - runtime blocks undeclared redirects
+- runtime blocks local, loopback, link-local, private, and multicast targets
+- runtime uses HTTPS-only fetches in V1
 - runtime should normalize hostnames
 - runtime should reject wildcard hosts in V1
 - runtime should record first use in receipts
@@ -184,4 +186,3 @@ Safe mode should:
 - disable all exports
 
 Safe mode gives users a recovery path if they suspect a capsule is malicious.
-

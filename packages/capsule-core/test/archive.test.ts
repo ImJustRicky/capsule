@@ -25,6 +25,14 @@ describe("readArchiveFromBuffer", () => {
     await expect(readArchiveFromBuffer(buf)).rejects.toBeInstanceOf(CapsuleError);
   });
 
+  it("rejects duplicate archive paths", async () => {
+    const buf = await buildZip([
+      { path: "capsule.json", content: JSON.stringify(validManifest) },
+      { path: "content/index.html", content: "<h1>first</h1>" },
+      { path: "content/index.html", content: "<h1>second</h1>" },
+    ]);
+    await expect(readArchiveFromBuffer(buf)).rejects.toThrow(/duplicate path/);
+  });
 });
 
 describe("loadCapsuleFromBuffer", () => {

@@ -8,27 +8,26 @@
  *   - text-wrap: balance on headings, pretty on body.
  *   - transition-property always specified; never `all`.
  *   - Buttons press with scale(0.96).
- *   - Enter animation split into 4 stagger groups, ~100ms apart.
  */
 
 :root {
-  --bg: #0a0b0d;
-  --bg-elev: #111318;
-  --bg-elev-2: #15181e;
+  --bg: #0d0e0c;
+  --bg-elev: #151713;
+  --bg-elev-2: #1b1f19;
   --border: rgba(255, 255, 255, 0.06);
   --border-strong: rgba(255, 255, 255, 0.1);
-  --fg: #e8ecf1;
-  --fg-muted: #8b93a1;
-  --fg-soft: #5c6471;
-  --accent: #5b8def;
-  --accent-soft: #7aa5ff;
-  --accent-weak: rgba(91, 141, 239, 0.14);
-  --ok: #3ecf8e;
-  --ok-weak: rgba(62, 207, 142, 0.14);
-  --warn: #f2b24b;
-  --warn-weak: rgba(242, 178, 75, 0.14);
-  --bad: #ef5b5b;
-  --bad-weak: rgba(239, 91, 91, 0.12);
+  --fg: #eef1e9;
+  --fg-muted: #a2aa9b;
+  --fg-soft: #717969;
+  --accent: #31d3b8;
+  --accent-soft: #9be7d3;
+  --accent-weak: rgba(49, 211, 184, 0.14);
+  --ok: #52d681;
+  --ok-weak: rgba(82, 214, 129, 0.14);
+  --warn: #f0bc5e;
+  --warn-weak: rgba(240, 188, 94, 0.14);
+  --bad: #f07167;
+  --bad-weak: rgba(240, 113, 103, 0.12);
   --shadow-panel:
     0 1px 0 rgba(255, 255, 255, 0.04) inset,
     0 1px 2px rgba(0, 0, 0, 0.4),
@@ -38,11 +37,11 @@
     0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-btn-primary:
     0 1px 0 rgba(255, 255, 255, 0.18) inset,
-    0 8px 20px -10px rgba(91, 141, 239, 0.6),
+    0 8px 20px -10px rgba(49, 211, 184, 0.5),
     0 2px 4px rgba(0, 0, 0, 0.3);
-  --radius-panel: 16px;
-  --radius-panel-inner: 10px;
-  --radius-btn: 10px;
+  --radius-panel: 8px;
+  --radius-panel-inner: 6px;
+  --radius-btn: 8px;
   --radius-chip: 999px;
   --easing: cubic-bezier(0.2, 0, 0, 1);
 }
@@ -79,12 +78,14 @@ body {
 
 .window-glow {
   position: fixed;
-  inset: -20% -10% auto -10%;
-  height: 50%;
-  background: radial-gradient(
-    60% 90% at 50% 0%,
-    rgba(91, 141, 239, 0.18),
-    rgba(91, 141, 239, 0) 70%
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(49, 211, 184, 0.55),
+    rgba(240, 188, 94, 0.45),
+    transparent
   );
   pointer-events: none;
   z-index: -1;
@@ -120,7 +121,7 @@ body {
   align-items: center;
   gap: 10px;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
 .brand-pill {
   position: relative;
@@ -131,17 +132,17 @@ body {
   overflow: hidden;
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.1),
-    0 2px 6px -2px rgba(91, 141, 239, 0.6);
+    0 2px 6px -2px rgba(49, 211, 184, 0.55);
 }
 .brand-pill-half {
   flex: 1;
   height: 100%;
 }
 .brand-pill-half:first-child {
-  background: linear-gradient(135deg, #7aa5ff, #5b8def);
+  background: linear-gradient(135deg, #9be7d3, #31d3b8);
 }
 .brand-pill-half:last-child {
-  background: linear-gradient(135deg, #2a3142, #1a1f2b);
+  background: linear-gradient(135deg, #f0bc5e, #8b6f38);
 }
 .brand-name {
   font-size: 13px;
@@ -153,25 +154,15 @@ body {
   color: var(--fg-soft);
   font-size: 12px;
 }
-.kbd-hint {
+.runtime-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-}
-kbd {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  font: inherit;
-  font-size: 11px;
-  background: var(--bg-elev);
+  min-height: 24px;
+  padding: 2px 9px;
   color: var(--fg-muted);
-  border-radius: 5px;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.05) inset,
-    0 0 0 1px var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--radius-chip);
+  box-shadow: 0 0 0 1px var(--border);
 }
 
 /* ---------- Hero card ---------- */
@@ -180,8 +171,10 @@ kbd {
   display: flex;
   gap: 18px;
   padding: 20px 22px;
-  background: linear-gradient(180deg, var(--bg-elev) 0%, var(--bg-elev-2) 100%);
-  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--bg-elev);
+  border-radius: var(--radius-panel);
   box-shadow: var(--shadow-panel);
   position: relative;
   overflow: hidden;
@@ -191,11 +184,7 @@ kbd {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(
-    circle at 12% 0%,
-    rgba(91, 141, 239, 0.1),
-    transparent 50%
-  );
+  box-shadow: 0 0 0 1px var(--border) inset;
 }
 .hero-icon {
   width: 48px;
@@ -203,8 +192,8 @@ kbd {
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  border-radius: 14px; /* 20 - 6 visual padding above/around */
-  box-shadow: 0 4px 14px -4px rgba(91, 141, 239, 0.55);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px -4px rgba(49, 211, 184, 0.45);
 }
 .hero-icon svg {
   display: block;
@@ -219,7 +208,7 @@ kbd {
 .hero-title {
   font-size: 22px;
   font-weight: 600;
-  letter-spacing: -0.015em;
+  letter-spacing: 0;
   margin: 0;
   text-wrap: balance;
 }
@@ -260,17 +249,17 @@ kbd {
 .chip-ok {
   color: var(--ok);
   background: var(--ok-weak);
-  box-shadow: 0 0 0 1px rgba(62, 207, 142, 0.3);
+  box-shadow: 0 0 0 1px rgba(82, 214, 129, 0.3);
 }
 .chip-unsigned {
   color: var(--warn);
   background: var(--warn-weak);
-  box-shadow: 0 0 0 1px rgba(242, 178, 75, 0.3);
+  box-shadow: 0 0 0 1px rgba(240, 188, 94, 0.3);
 }
 .chip-bad {
   color: var(--bad);
   background: var(--bad-weak);
-  box-shadow: 0 0 0 1px rgba(239, 91, 91, 0.3);
+  box-shadow: 0 0 0 1px rgba(240, 113, 103, 0.3);
 }
 .chip-dot {
   width: 6px;
@@ -300,13 +289,13 @@ kbd {
   font-weight: 600;
   color: var(--fg);
   margin: 0;
-  letter-spacing: 0.005em;
+  letter-spacing: 0;
 }
 .panel-sub {
   font-size: 11.5px;
   color: var(--fg-soft);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
 }
 
 /* Granted list — always shown, positive affordance. */
@@ -344,7 +333,7 @@ kbd {
   border-radius: 7px;
   background: var(--ok-weak);
   color: var(--ok);
-  box-shadow: 0 0 0 1px rgba(62, 207, 142, 0.22);
+  box-shadow: 0 0 0 1px rgba(82, 214, 129, 0.22);
   margin-top: 1px; /* optical centering with first line of text */
 }
 .grant-item.empty .icon-wrap {
@@ -371,9 +360,11 @@ kbd {
   padding: 2px 8px;
   border-radius: var(--radius-chip);
   box-shadow: 0 0 0 1px var(--border);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   align-self: start;
   margin-top: 2px;
+  text-align: right;
 }
 
 /* Denied grid — compact, muted, reassurance pattern. */
@@ -431,7 +422,7 @@ kbd {
   align-items: center;
   gap: 8px;
   padding: 9px 14px;
-  min-height: 38px;
+  min-height: 40px;
   font: inherit;
   font-weight: 500;
   font-size: 13px;
@@ -463,12 +454,12 @@ kbd {
 }
 .btn-primary {
   color: white;
-  background: linear-gradient(180deg, #6b9cff 0%, #4a7de8 100%);
-  box-shadow: var(--shadow-btn-primary), 0 0 0 1px rgba(91, 141, 239, 0.4);
+  background: linear-gradient(180deg, #3addc3 0%, #20a995 100%);
+  box-shadow: var(--shadow-btn-primary), 0 0 0 1px rgba(49, 211, 184, 0.4);
 }
 .btn-primary:hover {
-  background: linear-gradient(180deg, #78a6ff 0%, #528aef 100%);
-  box-shadow: var(--shadow-btn-primary), 0 0 0 1px rgba(91, 141, 239, 0.6);
+  background: linear-gradient(180deg, #50e4cb 0%, #28b8a2 100%);
+  box-shadow: var(--shadow-btn-primary), 0 0 0 1px rgba(49, 211, 184, 0.6);
 }
 .btn-primary:focus-visible {
   box-shadow:
@@ -481,31 +472,12 @@ kbd {
   box-shadow: none;
   color: var(--fg-muted);
   padding: 6px 10px;
-  min-height: 30px;
+  min-height: 40px;
 }
 .btn-ghost:hover {
   background: var(--bg-elev);
   color: var(--fg);
   box-shadow: 0 0 0 1px var(--border);
-}
-.btn-shortcut {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  font-size: 11px;
-  border-radius: 5px;
-  color: inherit;
-  opacity: 0.55;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
-  font-variant-numeric: tabular-nums;
-}
-.btn-primary .btn-shortcut {
-  background: rgba(255, 255, 255, 0.18);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1);
-  opacity: 0.85;
 }
 .btn-arrow {
   opacity: 0.9;
@@ -599,6 +571,7 @@ dialog p {
   font-size: 13px;
   margin: 0;
   text-wrap: pretty;
+  white-space: pre-line;
 }
 .dialog-actions {
   display: flex;
@@ -610,5 +583,50 @@ dialog p {
 @media (prefers-reduced-motion: reduce) {
   .btn:active {
     transform: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .screen {
+    padding: 16px;
+  }
+
+  .hero {
+    padding: 18px;
+    gap: 14px;
+  }
+
+  .hero-icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .panel {
+    padding: 14px;
+  }
+
+  .panel-header,
+  .actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .grant-item {
+    grid-template-columns: 22px 1fr;
+  }
+
+  .grant-scope {
+    grid-column: 2;
+    justify-self: start;
+    text-align: left;
+  }
+
+  .denied-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .btn {
+    justify-content: center;
+    width: 100%;
   }
 }

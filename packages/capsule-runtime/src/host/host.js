@@ -18,6 +18,7 @@
   }
   const manifest = state.manifest;
   const token = state.token;
+  const contentHash = state.content_hash || manifest.integrity?.content_hash || null;
 
   const CAP_LABELS = {
     "storage.local": "Save its own settings",
@@ -87,7 +88,7 @@
     } else {
       status.classList.add("chip-unsigned");
       status.appendChild(dot);
-      status.appendChild(document.createTextNode("unsigned"));
+      status.appendChild(document.createTextNode(contentHash ? "unsigned, hash computed" : "unsigned"));
     }
   }
 
@@ -225,6 +226,13 @@
       if (event.source !== frame.contentWindow) return;
       const req = event.data;
       if (!req || req.kind !== "capsule-request" || typeof req.id !== "string") return;
+      if (typeof req.capability !== "string" || typeof req.method !== "string") {
+        return reply(frame, req.id, {
+          ok: false,
+          error: "request.invalid",
+          message: "capability and method must be strings",
+        });
+      }
       await mediate(req, frame);
     });
   }
@@ -319,9 +327,14 @@
 
   function scopeCovers(declared, requested) {
     if (requested === null) return true;
-    if (Array.isArray(declared)) return declared.includes(requested);
+    const normalized = normalizeHost(requested);
+    if (Array.isArray(declared)) return declared.some((item) => normalizeHost(item) === normalized);
     if (declared === "*" || declared === "any") return true;
-    return declared === requested;
+    return normalizeHost(declared) === normalized;
+  }
+
+  function normalizeHost(host) {
+    return String(host).toLowerCase().replace(/\.$/, "");
   }
 
   async function receipt(record) {
@@ -351,28 +364,39 @@
         (reason ? `\n\nReason: ${reason}` : "");
       const allow = $("#perm-allow");
       const deny = $("#perm-deny");
+      let done = false;
 
-      const onAllow = () => {
+      const finish = (decision) => {
+        if (done) return;
+        done = true;
         cleanup();
-        resolve("granted");
+        resolve(decision);
       };
-      const onDeny = () => {
-        cleanup();
-        resolve("denied");
-      };
+      const onAllow = () => finish("granted");
+      const onDeny = () => finish("denied");
       const onEsc = (e) => {
         if (e.key === "Escape") onDeny();
       };
+      const onCancel = (e) => {
+        e.preventDefault();
+        onDeny();
+      };
+      const onClose = () => finish("denied");
       function cleanup() {
         allow.removeEventListener("click", onAllow);
         deny.removeEventListener("click", onDeny);
         window.removeEventListener("keydown", onEsc, true);
+        dlg.removeEventListener("cancel", onCancel);
+        dlg.removeEventListener("close", onClose);
         if (dlg.open) dlg.close();
       }
       allow.addEventListener("click", onAllow);
       deny.addEventListener("click", onDeny);
       window.addEventListener("keydown", onEsc, true);
+      dlg.addEventListener("cancel", onCancel);
+      dlg.addEventListener("close", onClose);
       if (!dlg.open) dlg.showModal();
+      deny.focus();
       void method; // keep signature flexible
     });
   }
@@ -408,7 +432,7 @@
 
   // -- storage.local -----------------------------------------------
 
-  const storageKey = manifest.slug + "@" + (manifest.integrity?.content_hash ?? "unsigned");
+  const storageKey = manifest.slug + "@" + (contentHash ?? "unsigned");
 
   function openStoreDB() {
     return new Promise((resolve, reject) => {

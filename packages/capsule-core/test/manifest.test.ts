@@ -42,6 +42,27 @@ describe("parseManifestText", () => {
     ).toThrow();
   });
 
+  it("accepts known required features", () => {
+    const m = parseManifestText(
+      JSON.stringify({
+        ...validManifest,
+        features: { required: ["manifest.1.0", "capability.storage.local"] },
+      }),
+    );
+    expect(m.features?.required).toEqual(["manifest.1.0", "capability.storage.local"]);
+  });
+
+  it("rejects unknown required features", () => {
+    expect(() =>
+      parseManifestText(
+        JSON.stringify({
+          ...validManifest,
+          features: { required: ["native.plugin"] },
+        }),
+      ),
+    ).toThrow(/unsupported required feature/);
+  });
+
   it("rejects entry when not listed in archive entries", () => {
     expect(() =>
       parseManifestText(JSON.stringify(validManifest), {

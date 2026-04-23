@@ -14,6 +14,7 @@ const MAP: Record<string, string> = {
   wasm: "application/wasm",
   txt: "text/plain; charset=utf-8",
   ico: "image/x-icon",
+  capsule: "application/vnd.capsule+zip",
 };
 
 export function contentTypeFor(path: string): string {

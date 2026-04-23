@@ -37,6 +37,11 @@ describe("CapabilityMediator", () => {
     expect(m.scopeCovers(d, "other.com")).toBe(false);
   });
 
+  it("normalizes host scope case", () => {
+    const d = { capability: "network.fetch" as const, scope: ["API.EXAMPLE.COM"], reason: "." };
+    expect(m.scopeCovers(d, "api.example.com")).toBe(true);
+  });
+
   it("accepts null requested-scope for scope-free capabilities", () => {
     const d = m.declarationFor("storage.local")!;
     expect(m.scopeCovers(d, null)).toBe(true);

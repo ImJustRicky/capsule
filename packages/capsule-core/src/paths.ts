@@ -30,7 +30,21 @@ export function validateArchivePath(raw: string): string {
     );
   }
   const segments = raw.split("/");
-  for (const segment of segments) {
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]!;
+    const isTrailingDirectoryMarker = segment === "" && i === segments.length - 1 && raw.endsWith("/");
+    if (segment === "" && !isTrailingDirectoryMarker) {
+      throw new CapsuleError(
+        ErrorCode.PathEmptySegment,
+        `path contains an empty segment: ${JSON.stringify(raw)}`,
+      );
+    }
+    if (segment === ".") {
+      throw new CapsuleError(
+        ErrorCode.PathDotSegment,
+        `path contains '.' segment: ${JSON.stringify(raw)}`,
+      );
+    }
     if (segment === "..") {
       throw new CapsuleError(
         ErrorCode.PathTraversal,

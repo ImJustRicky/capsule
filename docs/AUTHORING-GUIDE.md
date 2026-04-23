@@ -29,6 +29,16 @@ Weak V1 examples:
 
 ## Project Layout
 
+Fastest path:
+
+```bash
+capsule make my-checklist --template checklist
+capsule make ./site --name "Interactive Field Guide"
+```
+
+`capsule make` is the friendly path. It can create a starter project, package a
+plain folder with `index.html`, or package a full Capsule project.
+
 Recommended source folder:
 
 ```text
@@ -48,6 +58,9 @@ Pack it:
 ```bash
 capsule pack ./my-capsule
 ```
+
+Use `capsule pack` when you want the lower-level deterministic packer and you
+already have `capsule.json`.
 
 Inspect it:
 
@@ -199,4 +212,3 @@ Before sharing:
 This capsule works offline and stores data only inside its own isolated capsule storage.
 It cannot read your files, use the network, or run shell commands.
 ```
-

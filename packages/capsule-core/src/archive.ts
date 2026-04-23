@@ -53,6 +53,7 @@ export function readArchiveFromBuffer(
     yauzl.fromBuffer(buf, { lazyEntries: true }, (err, zip) => {
       if (err || !zip) return reject(err ?? new Error("failed to open archive"));
       const entries: ArchiveEntry[] = [];
+      const seenPaths = new Set<string>();
       let totalUncompressed = 0;
       let totalCompressed = 0;
 
@@ -90,6 +91,13 @@ export function readArchiveFromBuffer(
             );
           }
           validateArchivePath(rawName);
+          if (seenPaths.has(rawName)) {
+            throw new CapsuleError(
+              ErrorCode.ArchiveDuplicatePath,
+              `archive contains duplicate path: ${rawName}`,
+            );
+          }
+          seenPaths.add(rawName);
           const isDir = isDirectoryEntry(rawName);
           totalUncompressed += entry.uncompressedSize;
           totalCompressed += entry.compressedSize;

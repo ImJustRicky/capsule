@@ -38,6 +38,10 @@ application/x-capsule
 
 The standards track should eventually register the vendor MIME type properly.
 
+Reference tools SHOULD write archives with the `.capsule` extension by default
+and SHOULD reject explicit package outputs that use a generic extension such as
+`.zip`. The archive is ZIP-compatible, but the document type is Capsule.
+
 ## macOS
 
 Suggested Uniform Type Identifier:
@@ -148,4 +152,3 @@ Recommended path:
 7. Encourage third-party runtimes.
 8. Register MIME type.
 9. Standardize through a neutral home if adoption grows.
-

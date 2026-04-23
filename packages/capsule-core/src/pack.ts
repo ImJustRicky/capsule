@@ -5,6 +5,7 @@ import type { CapsuleManifest } from "./manifest.js";
 import { parseManifestText } from "./manifest.js";
 import { readArchiveFromBuffer } from "./archive.js";
 import { computeContentHash } from "./hash.js";
+import { CapsuleError, ErrorCode } from "./errors.js";
 
 /**
  * Reference packer. Produces byte-stable archives given byte-stable inputs:
@@ -57,7 +58,17 @@ export async function packArchive(
   if (!manifestFile) throw new Error("packArchive requires a capsule.json entry");
 
   // Validate all paths up front (defense in depth; yazl also rejects traversal).
-  for (const f of files) validateArchivePath(f.path);
+  const seenPaths = new Set<string>();
+  for (const f of files) {
+    validateArchivePath(f.path);
+    if (seenPaths.has(f.path)) {
+      throw new CapsuleError(
+        ErrorCode.ArchiveDuplicatePath,
+        `pack input contains duplicate path: ${f.path}`,
+      );
+    }
+    seenPaths.add(f.path);
+  }
 
   // Canonicalize capsule.json (sorted keys). integrity is always stripped for
   // the hashing pass; if stampIntegrity is false, we preserve the author's

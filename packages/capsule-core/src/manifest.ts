@@ -43,6 +43,19 @@ export interface CapsuleManifest {
 
 export const MANIFEST_SCHEMA = schema as unknown as Record<string, unknown>;
 
+const SUPPORTED_REQUIRED_FEATURES = new Set([
+  "archive.zip",
+  "manifest.1.0",
+  "sandbox.web",
+  "integrity.sha256",
+  "capability.storage.local",
+  "capability.filesystem.import",
+  "capability.filesystem.export",
+  "capability.clipboard.write",
+  "capability.network.fetch",
+  "capability.dialog.open",
+]);
+
 let cachedValidator: ValidateFunction<CapsuleManifest> | null = null;
 
 function getValidator(): ValidateFunction<CapsuleManifest> {
@@ -92,6 +105,15 @@ export function parseManifestText(
   }
   const manifest = raw as CapsuleManifest;
   validateArchivePath(manifest.entry);
+  const unsupported = (manifest.features?.required ?? []).filter(
+    (feature) => !SUPPORTED_REQUIRED_FEATURES.has(feature),
+  );
+  if (unsupported.length > 0) {
+    throw new CapsuleError(
+      ErrorCode.ManifestSchema,
+      `unsupported required feature(s): ${unsupported.join(", ")}`,
+    );
+  }
   if (opts.entries && !opts.entries.has(manifest.entry)) {
     throw new CapsuleError(
       ErrorCode.ManifestEntryMissing,

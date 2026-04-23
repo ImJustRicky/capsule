@@ -1,6 +1,7 @@
 import { CapsuleError } from "@capsule/core";
 import { inspect } from "./commands/inspect.js";
 import { pack } from "./commands/pack.js";
+import { make } from "./commands/make.js";
 import { create } from "./commands/create.js";
 import { verify } from "./commands/verify.js";
 import { run as runCmd } from "./commands/run.js";
@@ -9,6 +10,7 @@ import { receipts } from "./commands/receipts.js";
 const USAGE = `capsule — reference CLI for the Capsule 1.0 format
 
 Usage:
+  capsule make <folder|slug>        create or package a capsule with friendly defaults
   capsule create <slug>             scaffold a new capsule project directory
   capsule pack <dir> [-o <out>]     pack a directory into <dir>.capsule
   capsule inspect <file.capsule>    print manifest, files, integrity
@@ -30,6 +32,8 @@ export async function run(argv: string[]): Promise<number> {
         return 0;
       case "inspect":
         return await inspect(rest);
+      case "make":
+        return await make(rest);
       case "pack":
         return await pack(rest);
       case "create":
