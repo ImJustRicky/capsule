@@ -139,7 +139,8 @@ async function handle(
 
   if (rest === "capsule/" || rest.startsWith("capsule/")) {
     const inside = rest === "capsule/" ? session.manifest.entry : rest.slice("capsule/".length);
-    return serveCapsuleFile(res, session, inside);
+    const resolved = resolveCapsulePath(session, inside);
+    return serveCapsuleFile(res, session, resolved);
   }
 
   return respond(res, 404, "");
@@ -199,6 +200,19 @@ async function serveHostAsset(res: http.ServerResponse, name: string): Promise<v
     "cache-control": "no-store",
   });
   res.end(bytes);
+}
+
+function resolveCapsulePath(session: CapsuleSession, relPath: string): string {
+  // Allow authors to write plain relative refs in their HTML (href="style.css")
+  // by resolving against the entry's directory first, then falling back to the
+  // archive root so explicit "content/style.css" refs still work.
+  if (session.archive.byPath.has(relPath)) return relPath;
+  const slash = session.manifest.entry.lastIndexOf("/");
+  if (slash < 0) return relPath;
+  const entryDir = session.manifest.entry.slice(0, slash + 1);
+  if (relPath.startsWith(entryDir)) return relPath;
+  const candidate = entryDir + relPath;
+  return session.archive.byPath.has(candidate) ? candidate : relPath;
 }
 
 async function serveCapsuleFile(

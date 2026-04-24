@@ -46,3 +46,4 @@ receipts-local/
 
 # Generated smoke/playground directories
 /playground/
+/hello/

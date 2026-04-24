@@ -1,6 +1,6 @@
 import { loadCapsuleFromFile } from "@capsule/core";
 import { createSessionToken, startServer, type RunningServer } from "./server.js";
-import { openInAppWindow } from "./launch.js";
+import { openInAppWindow, type WindowHandle } from "./launch.js";
 import { defaultReceiptPath, openReceiptLog } from "./receipts.js";
 
 export * from "./protocol.js";
@@ -21,6 +21,7 @@ export interface RunCapsuleOptions {
 export interface RunCapsuleResult {
   server: RunningServer;
   url: string;
+  closeWindow: WindowHandle;
 }
 
 export async function runCapsule(
@@ -56,12 +57,13 @@ export async function runCapsule(
     },
     serverOpts,
   );
+  let closeWindow: WindowHandle = async () => undefined;
   if (!options.headless) {
     const preferred = loaded.manifest.display?.preferred_size;
     const winOpts: { width?: number; height?: number } = {};
     if (preferred?.width) winOpts.width = preferred.width;
     if (preferred?.height) winOpts.height = preferred.height;
-    openInAppWindow(server.url, winOpts);
+    closeWindow = openInAppWindow(server.url, winOpts);
   }
-  return { server, url: server.url };
+  return { server, url: server.url, closeWindow };
 }

@@ -11,13 +11,16 @@ export async function run(argv: string[]): Promise<number> {
   if (headless) opts.headless = true;
   if (port !== undefined) opts.port = port;
 
-  const { server } = await runCapsule(file, opts);
+  const { server, closeWindow } = await runCapsule(file, opts);
   process.stdout.write(`capsule running at ${server.url}\n`);
   process.stdout.write("press Ctrl+C to stop\n");
 
   return await new Promise<number>((resolve) => {
+    let shuttingDown = false;
     const shutdown = () => {
-      server.close().finally(() => resolve(0));
+      if (shuttingDown) return;
+      shuttingDown = true;
+      Promise.allSettled([closeWindow(), server.close()]).then(() => resolve(0));
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
