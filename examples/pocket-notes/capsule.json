@@ -1,0 +1,25 @@
+{
+  "capsule_version": "1.0",
+  "name": "Pocket Notes",
+  "slug": "pocket-notes",
+  "version": "0.1.0",
+  "description": "A polished markdown notepad with live preview. Saves drafts locally, scoped to this capsule. No network.",
+  "entry": "content/index.html",
+  "author": { "name": "Capsule Examples" },
+  "permissions": [
+    {
+      "capability": "storage.local",
+      "scope": "capsule",
+      "reason": "Keep your draft between sessions, on this device only."
+    }
+  ],
+  "network": { "default": "deny", "allow": [] },
+  "privacy": {
+    "summary": "Drafts live in capsule-private storage on this device. Nothing is sent over the network.",
+    "data_stored": ["current draft"],
+    "data_shared": []
+  },
+  "display": {
+    "preferred_size": { "width": 1100, "height": 720 }
+  }
+}

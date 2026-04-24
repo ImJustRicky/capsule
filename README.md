@@ -4,8 +4,8 @@
 
 # Capsule
 
-**A single-file format for tiny apps you can open, inspect, fork, and share.**
-Portable like PDFs. Interactive like web apps. Sandboxed by default.
+**An open file format for portable, sandboxed interactive documents.**
+Spec + reference implementation. Like PDF — but interactive.
 
 [![CI](https://github.com/ImJustRicky/capsule/actions/workflows/ci.yml/badge.svg)](https://github.com/ImJustRicky/capsule/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -15,7 +15,7 @@ Portable like PDFs. Interactive like web apps. Sandboxed by default.
 [![Status: V1 draft](https://img.shields.io/badge/status-V1%20draft-orange)](PLAN.md#milestones)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
-[Quick start](#quick-start) · [How it works](#how-it-works) · [Security model](#security-model-v1) · [Spec](docs/CAPSULE-1.0-DRAFT.md) · [Examples](examples) · [Contributing](CONTRIBUTING.md)
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Security model](#security-model-v1) · [Spec](docs/CAPSULE-1.0-DRAFT.md) · [Examples](examples) · [Installers](installers) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -115,6 +115,7 @@ node packages/capsule-cli/bin/capsule.mjs run hello.capsule
 
 The [`examples/`](examples) directory contains reference capsules that exercise the format and capability model. Each is a plain directory you can `capsule pack` and `capsule run`.
 
+- [`pocket-notes`](examples/pocket-notes) — polished markdown notepad with live preview, persists drafts via `storage.local`
 - [`offline-checklist`](examples/offline-checklist) — local-only checklist that uses `storage.local`
 - [`mortgage-calculator`](examples/mortgage-calculator) — pure-compute capsule, no capabilities
 - [`poster-maker`](examples/poster-maker) — canvas drawing, no network
@@ -135,6 +136,7 @@ The format is documented as a standards draft in [`docs/`](docs/). The V1 implem
 | [`RUNTIME-CONFORMANCE.md`](docs/RUNTIME-CONFORMANCE.md) | What a compatible runtime must do |
 | [`OS-INTEGRATION.md`](docs/OS-INTEGRATION.md) | File extension, MIME, icons |
 | [`AUTHORING-GUIDE.md`](docs/AUTHORING-GUIDE.md) | How to make safe capsules |
+| [`RELEASE.md`](docs/RELEASE.md) | How releases are built, signed, and verified |
 
 ## Making capsules
 

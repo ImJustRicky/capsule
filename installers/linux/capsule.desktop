@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Capsule
+GenericName=Capsule Document Viewer
+Comment=Open Capsule (.capsule) interactive documents in a sandboxed runtime
+Exec=capsule-launcher %f
+Icon=capsule
+Terminal=false
+Categories=Utility;Viewer;
+MimeType=application/vnd.capsule+zip;application/x-capsule;
+NoDisplay=false
+StartupNotify=false
