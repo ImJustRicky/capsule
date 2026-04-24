@@ -1,0 +1,116 @@
+#!/bin/bash
+#
+# Capsule.app launcher
+# --------------------
+# This script is the executable that macOS runs when:
+#   - the user double-clicks a .capsule file (with this app as default opener)
+#   - `open -a Capsule.app some.capsule` is run
+#   - a .capsule is dragged onto the app icon
+#
+# It locates a Node interpreter, then hands the file to the bundled
+# capsule-runtime via the CLI. The runtime takes care of starting the
+# sandboxed HTTP server and opening the Open Screen window.
+#
+# When packaged for distribution (see ../../../build.sh), the runtime is
+# embedded inside the app bundle under Contents/Resources/runtime so the user
+# does not need a copy of the source repo.
+
+set -e
+
+BUNDLE_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+RESOURCES_DIR="$BUNDLE_DIR/Resources"
+RUNTIME_ENTRY="$RESOURCES_DIR/runtime/packages/capsule-cli/bin/capsule.mjs"
+
+# Find a Node interpreter. We probe the most common install locations because
+# .app bundles do NOT inherit the user's interactive PATH (Finder strips it).
+find_node() {
+    local candidates=(
+        "/usr/local/bin/node"
+        "/opt/homebrew/bin/node"
+        "$HOME/.volta/bin/node"
+        "$HOME/.nvm/versions/node/*/bin/node"
+        "$HOME/.fnm/aliases/default/bin/node"
+        "$HOME/n/bin/node"
+        "/usr/bin/node"
+    )
+    for c in "${candidates[@]}"; do
+        for resolved in $c; do
+            if [ -x "$resolved" ]; then
+                echo "$resolved"
+                return 0
+            fi
+        done
+    done
+    if command -v node >/dev/null 2>&1; then
+        command -v node
+        return 0
+    fi
+    return 1
+}
+
+NODE_BIN="$(find_node)" || NODE_BIN=""
+
+if [ -z "$NODE_BIN" ]; then
+    osascript <<'OSA'
+display dialog "Capsule needs Node.js (v20 or newer) to run.
+
+Install it from https://nodejs.org and try again." \
+        with title "Capsule" \
+        buttons {"Open nodejs.org", "OK"} \
+        default button "Open nodejs.org" \
+        with icon caution
+    if button returned of result is "Open nodejs.org" then
+        do shell script "open https://nodejs.org"
+    end if
+OSA
+    exit 1
+fi
+if ! "$NODE_BIN" -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 20 ? 0 : 1)' >/dev/null 2>&1; then
+    NODE_VERSION="$("$NODE_BIN" -v 2>/dev/null || echo unknown)"
+    osascript <<OSA
+display dialog "Capsule needs Node.js v20 or newer to run.
+
+Current version: $NODE_VERSION" \
+        with title "Capsule" \
+        buttons {"Open nodejs.org", "OK"} \
+        default button "Open nodejs.org" \
+        with icon caution
+    if button returned of result is "Open nodejs.org" then
+        do shell script "open https://nodejs.org"
+    end if
+OSA
+    exit 1
+fi
+
+if [ ! -f "$RUNTIME_ENTRY" ]; then
+    osascript -e 'display dialog "Capsule.app is missing its bundled runtime. Reinstall the app." with title "Capsule" buttons {"OK"} default button "OK" with icon stop'
+    exit 1
+fi
+
+# macOS may pass file arguments either as positional args (drag-and-drop,
+# right-click → Open With) or via the special -psn_xxx process serial number
+# arg followed by no files (cold launch). Filter out -psn_*.
+FILES=()
+for arg in "$@"; do
+    case "$arg" in
+        -psn_*) ;;
+        *) FILES+=("$arg") ;;
+    esac
+done
+
+if [ ${#FILES[@]} -eq 0 ]; then
+    osascript <<'OSA'
+display dialog "Capsule is installed.
+
+To open a .capsule file, double-click it in Finder or run:
+  open -a Capsule path/to/file.capsule" \
+        with title "Capsule" \
+        buttons {"OK"} default button "OK" with icon note
+OSA
+    exit 0
+fi
+
+for f in "${FILES[@]}"; do
+    "$NODE_BIN" "$RUNTIME_ENTRY" run "$f" || \
+        osascript -e "display dialog \"Capsule failed to open $(basename "$f").\" with title \"Capsule\" buttons {\"OK\"} default button \"OK\" with icon stop"
+done

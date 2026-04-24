@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Pocket Notes</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="dot"></span>
+        <span class="title">Pocket Notes</span>
+      </div>
+      <div class="meta">
+        <span id="status" class="status">saved</span>
+        <span class="dot-sep">·</span>
+        <span id="counts" class="counts">0 words</span>
+      </div>
+      <div class="actions">
+        <button id="sample" type="button" class="ghost">Insert sample</button>
+        <button id="clear" type="button" class="ghost danger">Clear</button>
+      </div>
+    </header>
+
+    <main class="split">
+      <section class="pane">
+        <label class="pane-label" for="editor">Markdown</label>
+        <textarea
+          id="editor"
+          spellcheck="true"
+          autocomplete="off"
+          autocapitalize="sentences"
+          placeholder="# Start writing&#10;&#10;Type **markdown** on the left, see it rendered on the right."
+        ></textarea>
+      </section>
+      <section class="pane">
+        <label class="pane-label">Preview</label>
+        <article id="preview" class="preview"></article>
+      </section>
+    </main>
+  </body>
+</html>

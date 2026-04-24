@@ -1,0 +1,271 @@
+name: Release
+
+# Builds, (optionally) signs, and publishes Capsule installers for
+# macOS (.dmg), Linux (.tar.gz), and Windows (.zip) whenever a tag of the
+# form v*.*.* is pushed. The resulting artifacts are attached to a new
+# GitHub Release along with SHA-256 checksums and minisign signatures.
+#
+# Code-signing is optional and driven entirely by repository secrets.
+# With no secrets configured, unsigned artifacts are still produced and
+# published — end users will see OS warnings but the flow works for the
+# project's V1 reference implementation.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # ------------------------------------------------------------------
+  # macOS: build Capsule.app, sign it, wrap it in a notarized DMG
+  # ------------------------------------------------------------------
+  macos:
+    runs-on: macos-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - id: meta
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -z "$VERSION" ] && VERSION="0.0.0-dev"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "CAPSULE_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # --- Optional: import Apple Developer ID certificate from secrets ---
+      - name: Import codesign keychain
+        if: env.APPLE_CERT_P12 != ''
+        env:
+          APPLE_CERT_P12: ${{ secrets.APPLE_CERT_P12 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: github-actions
+        run: |
+          echo "$APPLE_CERT_P12" | base64 --decode > /tmp/cert.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import /tmp/cert.p12 -k build.keychain \
+            -P "$APPLE_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm /tmp/cert.p12
+
+      - name: Build Capsule.app
+        run: ./installers/macos/build.sh
+
+      - name: Build DMG
+        env:
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./installers/macos/dmg.sh
+
+      - name: Compute checksums
+        working-directory: installers/macos/build
+        run: |
+          shasum -a 256 Capsule-*.dmg > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      # --- Optional: minisign signature for independently verifiable provenance ---
+      - name: Minisign DMG
+        if: env.MINISIGN_SECRET_KEY != ''
+        working-directory: installers/macos/build
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          brew install minisign >/dev/null
+          echo "$MINISIGN_SECRET_KEY" > /tmp/minisign.key
+          for f in Capsule-*.dmg; do
+            minisign -S -s /tmp/minisign.key -m "$f" -W "$MINISIGN_PASSWORD"
+          done
+          rm /tmp/minisign.key
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capsule-macos
+          path: |
+            installers/macos/build/Capsule-*.dmg
+            installers/macos/build/Capsule-*.dmg.sha256
+            installers/macos/build/Capsule-*.dmg.minisig
+            installers/macos/build/SHA256SUMS.txt
+
+  # ------------------------------------------------------------------
+  # Linux: tarball containing runtime + install.sh
+  # ------------------------------------------------------------------
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+
+      - name: Stage runtime
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -z "$VERSION" ] && VERSION="0.0.0-dev"
+          STAGE="capsule-${VERSION}-linux"
+          mkdir -p "$STAGE/runtime/packages"
+          for pkg in capsule-core capsule-runtime capsule-cli; do
+            mkdir -p "$STAGE/runtime/packages/$pkg"
+            cp -R "packages/$pkg/dist" "$STAGE/runtime/packages/$pkg/dist"
+            if [ -d "packages/$pkg/bin" ]; then
+              cp -R "packages/$pkg/bin" "$STAGE/runtime/packages/$pkg/bin"
+            fi
+            cp "packages/$pkg/package.json" "$STAGE/runtime/packages/$pkg/package.json"
+          done
+          cat > "$STAGE/runtime/package.json" <<'JSON'
+          {"name":"capsule-bundle","private":true,"version":"0.0.0","type":"module","workspaces":["packages/*"]}
+          JSON
+          node installers/scripts/rewrite-workspace-deps.mjs "$STAGE/runtime"
+          (cd "$STAGE/runtime" && npm install --omit=dev --no-audit --no-fund --silent)
+          mkdir -p "$STAGE/assets"
+          cp installers/assets/capsule.png "$STAGE/assets/"
+          cp installers/linux/capsule.desktop installers/linux/capsule-launcher.sh \
+             installers/linux/install.sh installers/linux/uninstall.sh "$STAGE/"
+          tar -czf "$STAGE.tar.gz" "$STAGE"
+          shasum -a 256 "$STAGE.tar.gz" > "$STAGE.tar.gz.sha256"
+
+      - name: Minisign tarball
+        if: env.MINISIGN_SECRET_KEY != ''
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          sudo apt-get update && sudo apt-get install -y minisign
+          echo "$MINISIGN_SECRET_KEY" > /tmp/minisign.key
+          for f in capsule-*-linux.tar.gz; do
+            minisign -S -s /tmp/minisign.key -m "$f" -W "$MINISIGN_PASSWORD"
+          done
+          rm /tmp/minisign.key
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capsule-linux
+          path: |
+            capsule-*-linux.tar.gz
+            capsule-*-linux.tar.gz.sha256
+            capsule-*-linux.tar.gz.minisig
+
+  # ------------------------------------------------------------------
+  # Windows: zip containing runtime + install.ps1, optionally Authenticode-signed
+  # ------------------------------------------------------------------
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r build
+
+      - name: Stage runtime
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          if (-not $version) { $version = "0.0.0-dev" }
+          $stage = "capsule-$version-windows"
+          New-Item -ItemType Directory -Force -Path "$stage\runtime\packages" | Out-Null
+          foreach ($pkg in @("capsule-core","capsule-runtime","capsule-cli")) {
+            New-Item -ItemType Directory -Force -Path "$stage\runtime\packages\$pkg" | Out-Null
+            Copy-Item -Recurse "packages\$pkg\dist" "$stage\runtime\packages\$pkg\dist"
+            if (Test-Path "packages\$pkg\bin") {
+              Copy-Item -Recurse "packages\$pkg\bin" "$stage\runtime\packages\$pkg\bin"
+            }
+            Copy-Item "packages\$pkg\package.json" "$stage\runtime\packages\$pkg\package.json"
+          }
+          '{"name":"capsule-bundle","private":true,"version":"0.0.0","type":"module","workspaces":["packages/*"]}' |
+            Set-Content -Encoding UTF8 "$stage\runtime\package.json"
+          node installers\scripts\rewrite-workspace-deps.mjs "$stage\runtime"
+          Push-Location "$stage\runtime"; npm install --omit=dev --no-audit --no-fund --silent | Out-Null; Pop-Location
+          New-Item -ItemType Directory -Force -Path "$stage\assets" | Out-Null
+          Copy-Item installers\assets\capsule.ico "$stage\assets\"
+          Copy-Item installers\windows\install.ps1,installers\windows\uninstall.ps1 "$stage\"
+          Compress-Archive -Path "$stage" -DestinationPath "$stage.zip" -Force
+          (Get-FileHash "$stage.zip" -Algorithm SHA256).Hash | Set-Content "$stage.zip.sha256"
+
+      - name: Authenticode sign installer scripts
+        if: env.WINDOWS_CERT_P12 != ''
+        shell: pwsh
+        env:
+          WINDOWS_CERT_P12: ${{ secrets.WINDOWS_CERT_P12 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $cert = [Convert]::FromBase64String($env:WINDOWS_CERT_P12)
+          [IO.File]::WriteAllBytes("$env:TEMP\cert.pfx", $cert)
+          $signtool = "C:\Program Files (x86)\Windows Kits\10\bin\x64\signtool.exe"
+          if (-not (Test-Path $signtool)) {
+            $signtool = (Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Select-Object -First 1).FullName
+          }
+          Get-ChildItem -Directory capsule-*-windows | ForEach-Object {
+            & $signtool sign /f "$env:TEMP\cert.pfx" /p $env:WINDOWS_CERT_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 `
+              (Join-Path $_.FullName "install.ps1") `
+              (Join-Path $_.FullName "uninstall.ps1")
+            Compress-Archive -Path $_.FullName -DestinationPath "$($_.FullName).zip" -Force
+            (Get-FileHash "$($_.FullName).zip" -Algorithm SHA256).Hash | Set-Content "$($_.FullName).zip.sha256"
+          }
+          Remove-Item "$env:TEMP\cert.pfx"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capsule-windows
+          path: |
+            capsule-*-windows.zip
+            capsule-*-windows.zip.sha256
+
+  # ------------------------------------------------------------------
+  # Collect everything and publish a release
+  # ------------------------------------------------------------------
+  release:
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Flatten artifacts
+        run: |
+          mkdir -p release
+          find dist -type f \( -name 'Capsule-*' -o -name 'capsule-*' -o -name 'SHA256SUMS.txt' \) -exec cp {} release/ \;
+          (cd release && shasum -a 256 * | grep -v SHA256SUMS.txt | tee SHA256SUMS.txt)
+          ls -lh release
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          body: |
+            Installers for macOS, Linux, and Windows.
+
+            Each artifact ships with a SHA-256 checksum file. When the release
+            was built with signing secrets configured, you will also see
+            `*.minisig` (public-key signatures) and the macOS `.dmg` will be
+            notarized by Apple. See [`docs/RELEASE.md`](docs/RELEASE.md) for
+            how to verify the downloads.

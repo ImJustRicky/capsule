@@ -47,3 +47,9 @@ receipts-local/
 # Generated smoke/playground directories
 /playground/
 /hello/
+
+# Working source backups (keep only the cropped versions)
+docs/assets/*-original.*
+
+# Private working notes (demo scripts, drafts, todo lists)
+.notes/
