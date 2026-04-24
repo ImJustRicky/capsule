@@ -1,13 +1,32 @@
+<div align="center">
+
+<img src="docs/assets/capsule.png" alt="Capsule" width="640" />
+
 # Capsule
 
-> A single-file format for tiny apps you can open, inspect, fork, and share. Portable like PDFs. Interactive like web apps. Sandboxed by default.
+**A single-file format for tiny apps you can open, inspect, fork, and share.**
+Portable like PDFs. Interactive like web apps. Sandboxed by default.
 
-`.capsule` is an open format for interactive documents. A capsule is a self-contained zip archive with a manifest, content, and integrity metadata. It opens offline, runs inside a strict sandbox, and declares every capability it wants up front. You see the contract before you click Run.
+[![CI](https://github.com/ImJustRicky/capsule/actions/workflows/ci.yml/badge.svg)](https://github.com/ImJustRicky/capsule/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![pnpm](https://img.shields.io/badge/pnpm-9-F69220?logo=pnpm&logoColor=white)](https://pnpm.io)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Status: V1 draft](https://img.shields.io/badge/status-V1%20draft-orange)](PLAN.md#milestones)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
+
+[Quick start](#quick-start) · [How it works](#how-it-works) · [Security model](#security-model-v1) · [Spec](docs/CAPSULE-1.0-DRAFT.md) · [Examples](examples) · [Contributing](CONTRIBUTING.md)
+
+</div>
+
+---
 
 ```text
 PDFs made documents portable.
 Capsules make interactive documents portable.
 ```
+
+`.capsule` is an open format for interactive documents. A capsule is a self-contained zip archive with a manifest, content, and integrity metadata. It opens offline, runs inside a strict sandbox, and declares every capability it wants up front. **You see the contract before you click Run.**
 
 ## Why
 
@@ -32,12 +51,14 @@ Opening a capsule is inert. Capabilities are always denied by default and mediat
 - update themselves silently
 - access camera, microphone, or location
 
-Full details: [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md).
+> Full details: [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md).
 
 ## Quick start
 
+> **Requirements:** Node 20+, pnpm 9+
+
 ```bash
-# install deps
+# install + build
 pnpm install
 pnpm -r build
 
@@ -54,7 +75,33 @@ node packages/capsule-cli/bin/capsule.mjs inspect hello.capsule
 node packages/capsule-cli/bin/capsule.mjs run hello.capsule
 ```
 
-`capsule run` starts a short-lived HTTP server bound to `127.0.0.1` on a random port with an unguessable path token, then opens a chromeless browser window with the Open Screen. The capsule HTML loads inside a sandboxed `<iframe>` with a strict Content-Security-Policy. All capability calls cross a `postMessage` bridge to the host, which enforces the manifest.
+> **Tip:** add a shell alias so you can drop the prefix:
+> ```bash
+> alias capsule="node $(pwd)/packages/capsule-cli/bin/capsule.mjs"
+> ```
+
+## How it works
+
+`capsule run` starts a short-lived HTTP server bound to `127.0.0.1` on a random port with an unguessable path token, then opens a chromeless browser window with the **Open Screen**. The capsule HTML loads inside a sandboxed `<iframe>` with a strict Content-Security-Policy. All capability calls cross a `postMessage` bridge to the host, which enforces the manifest.
+
+```text
+┌───────────────────────────────┐
+│   Open Screen (host page)     │  ← shows what the capsule can/can't do
+│   ┌─────────────────────────┐ │
+│   │  Capsule iframe         │ │  ← strict CSP, sandboxed
+│   │  • no network           │ │
+│   │  • no shell             │ │
+│   │  • no ambient access    │ │
+│   └─────────────────────────┘ │
+└───────────────────────────────┘
+              ▲
+              │ postMessage bridge
+              ▼
+┌───────────────────────────────┐
+│  Local runtime server         │  ← mediates every capability call
+│  127.0.0.1:<random>           │
+└───────────────────────────────┘
+```
 
 ## Packages
 
@@ -62,30 +109,46 @@ node packages/capsule-cli/bin/capsule.mjs run hello.capsule
 | --- | --- |
 | [`capsule-core`](packages/capsule-core) | Format library: manifest schema, archive reader, path rules, deterministic packer, canonical content hash |
 | [`capsule-runtime`](packages/capsule-runtime) | Sandbox host: HTTP server, Open Screen UI, capability bridge, permission prompts, receipts |
-| [`capsule-cli`](packages/capsule-cli) | Author tooling: `create`, `pack`, `inspect`, `verify`, `run` |
+| [`capsule-cli`](packages/capsule-cli) | Author tooling: `make`, `pack`, `inspect`, `verify`, `run`, `receipts` |
 
 ## Examples
 
-The `examples/` directory contains reference capsules that exercise the format and capability model. Each is a plain directory you can `capsule pack` and `capsule run`.
+The [`examples/`](examples) directory contains reference capsules that exercise the format and capability model. Each is a plain directory you can `capsule pack` and `capsule run`.
+
+- [`offline-checklist`](examples/offline-checklist) — local-only checklist that uses `storage.local`
+- [`mortgage-calculator`](examples/mortgage-calculator) — pure-compute capsule, no capabilities
+- [`poster-maker`](examples/poster-maker) — canvas drawing, no network
 
 ## Standards draft
 
 The format is documented as a standards draft in [`docs/`](docs/). The V1 implementation treats these files as the source of truth:
 
-- [`CAPSULE-1.0-DRAFT.md`](docs/CAPSULE-1.0-DRAFT.md) — high-level standard
-- [`ARCHIVE-FORMAT.md`](docs/ARCHIVE-FORMAT.md) — `.capsule` archive layout
-- [`MANIFEST.md`](docs/MANIFEST.md) — `capsule.json` fields
-- [`MANIFEST-1.0.schema.json`](docs/MANIFEST-1.0.schema.json) — JSON Schema
-- [`CAPABILITY-MODEL.md`](docs/CAPABILITY-MODEL.md) — permission system
-- [`SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) — sandbox and threat model
-- [`SIGNING-AND-INTEGRITY.md`](docs/SIGNING-AND-INTEGRITY.md) — hashing, signatures, provenance
-- [`RUNTIME-CONFORMANCE.md`](docs/RUNTIME-CONFORMANCE.md) — what a compatible runtime must do
-- [`OS-INTEGRATION.md`](docs/OS-INTEGRATION.md) — file extension, MIME, icons
-- [`AUTHORING-GUIDE.md`](docs/AUTHORING-GUIDE.md) — how to make safe capsules
+| Document | Scope |
+| --- | --- |
+| [`CAPSULE-1.0-DRAFT.md`](docs/CAPSULE-1.0-DRAFT.md) | High-level standard |
+| [`ARCHIVE-FORMAT.md`](docs/ARCHIVE-FORMAT.md) | `.capsule` archive layout |
+| [`MANIFEST.md`](docs/MANIFEST.md) | `capsule.json` fields |
+| [`MANIFEST-1.0.schema.json`](docs/MANIFEST-1.0.schema.json) | JSON Schema |
+| [`CAPABILITY-MODEL.md`](docs/CAPABILITY-MODEL.md) | Permission system |
+| [`SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) | Sandbox and threat model |
+| [`SIGNING-AND-INTEGRITY.md`](docs/SIGNING-AND-INTEGRITY.md) | Hashing, signatures, provenance |
+| [`RUNTIME-CONFORMANCE.md`](docs/RUNTIME-CONFORMANCE.md) | What a compatible runtime must do |
+| [`OS-INTEGRATION.md`](docs/OS-INTEGRATION.md) | File extension, MIME, icons |
+| [`AUTHORING-GUIDE.md`](docs/AUTHORING-GUIDE.md) | How to make safe capsules |
+
+## Making capsules
+
+For most authors, start with `capsule make`. It creates a template project when the path does not exist, or packages an existing web folder when it does.
+
+```bash
+capsule make my-checklist --template checklist
+capsule make ./dist --name "Interactive Report"
+capsule make --list-templates
+```
+
+Use `capsule pack` when you already have a complete Capsule project with an authored `capsule.json` and want strict deterministic packaging.
 
 ## Development
-
-Requirements: Node 20+, pnpm 9+.
 
 ```bash
 pnpm install
@@ -96,24 +159,22 @@ pnpm -r typecheck   # tsc --noEmit across all packages
 
 Tests, type checks, and builds all run in CI on Ubuntu and macOS against Node 20 and 22. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-## Making Capsules
-
-For most authors, start with `capsule make`. It creates a template project when
-the path does not exist, or packages an existing web folder when it does.
-
-```bash
-capsule make my-checklist --template checklist
-capsule make ./dist --name "Interactive Report"
-capsule make --list-templates
-```
-
-Use `capsule pack` when you already have a complete Capsule project with an
-authored `capsule.json` and want strict deterministic packaging.
-
 ## Status
 
-V1 reference implementation. The format spec is a draft, not frozen. Breaking changes are possible before 1.0. [Milestones](PLAN.md#milestones) track current progress.
+V1 reference implementation. The format spec is a draft, not frozen. Breaking changes are possible before 1.0. See [milestones](PLAN.md#milestones) for current progress.
+
+## Contributing
+
+Contributions are welcome — bugs, features, examples, and spec feedback. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow.
 
 ## License
 
 [MIT](LICENSE). Capsule is intended to be implementable by more than one runtime — the format, manifest, and behavior are documented independently of this implementation.
+
+---
+
+<div align="center">
+
+If Capsule is useful to you, consider starring the repo to help others find it.
+
+</div>
