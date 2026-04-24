@@ -35,6 +35,51 @@ installers copy `runtime/` directly and do not require `pnpm`.
 - **Windows**: no admin rights needed; everything is per-user under `HKCU`
   and `%LOCALAPPDATA%`.
 
+## First launch from an unsigned release
+
+Until a signed release is cut (see [`docs/RELEASE.md`](../docs/RELEASE.md)),
+every OS will challenge the download on first use.
+
+### macOS
+
+Gatekeeper silently blocks unsigned downloaded apps. After copying to
+`/Applications`, strip the quarantine attribute:
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/Capsule.app
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+  -f /Applications/Capsule.app
+```
+
+Or do it the GUI way: right-click `Capsule.app` → **Open** → **Open**.
+
+If `.capsule` files are still opening with a different app (e.g. Archive
+Utility), force the default handler:
+
+```bash
+brew install duti   # one-time
+duti -s dev.capsule.runtime org.capsule.capsule all
+```
+
+### Windows
+
+SmartScreen shows *"Windows protected your PC"* on first run of the
+installer. Click **More info → Run anyway**. If PowerShell refuses the
+script, use `-ExecutionPolicy Bypass`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+### Linux
+
+No signing-related friction. If `xdg-mime` didn't set Capsule as the
+default opener, run it manually:
+
+```bash
+xdg-mime default capsule.desktop application/vnd.capsule+zip
+```
+
 ## Uninstall
 
 | Platform | Command |

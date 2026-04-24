@@ -80,6 +80,54 @@ node packages/capsule-cli/bin/capsule.mjs run hello.capsule
 > alias capsule="node $(pwd)/packages/capsule-cli/bin/capsule.mjs"
 > ```
 
+## First launch after installing from a download
+
+The v0.1.x release artifacts are **not yet code-signed** (the signing
+pipeline is wired up in [`release.yml`](.github/workflows/release.yml) but
+the Apple Developer / Authenticode secrets aren't populated). Until they
+are, your OS will flag the downloaded installers. One-time workarounds:
+
+### macOS — Capsule.dmg
+
+When you drag `Capsule.app` from the DMG to `/Applications`, the OS tags it
+with a quarantine flag. Double-clicking it then fails **silently** — no
+error dialog, no logs, just nothing.
+
+Strip the quarantine and re-register the app:
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/Capsule.app
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
+  -f /Applications/Capsule.app
+```
+
+Then double-click any `.capsule` file — the sandbox window opens.
+
+Alternatively, right-click `Capsule.app` → **Open** → **Open** once. After
+that macOS remembers your decision.
+
+### Windows — capsule-*-windows.zip
+
+SmartScreen shows a blue **"Windows protected your PC"** dialog on first
+run. Click **More info → Run anyway** once.
+
+PowerShell may also refuse to run `install.ps1` due to the Execution
+Policy. Use the bypass flag:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+### Linux — capsule-*-linux.tar.gz
+
+No signing friction. Extract the tarball and run `sudo ./install.sh`.
+
+---
+
+Once the release is signed (Apple notarization + Authenticode), these
+workarounds go away for end users. See [`docs/RELEASE.md`](docs/RELEASE.md)
+for how signing is configured.
+
 ## How it works
 
 `capsule run` starts a short-lived HTTP server bound to `127.0.0.1` on a random port with an unguessable path token, then opens a chromeless browser window with the **Open Screen**. The capsule HTML loads inside a sandboxed `<iframe>` with a strict Content-Security-Policy. All capability calls cross a `postMessage` bridge to the host, which enforces the manifest.
