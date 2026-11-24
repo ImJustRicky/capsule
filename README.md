@@ -4,18 +4,19 @@
 
 # Capsule
 
-**An open file format for portable, sandboxed interactive documents.**
-Spec + reference implementation. Like PDF — but interactive.
+**Send someone a small app as a single file. They see exactly what it can do before it runs, and it runs in a locked-down sandbox.**
+
+An open file format for portable, sandboxed interactive documents. Spec + reference implementation.
 
 [![CI](https://github.com/ImJustRicky/capsule/actions/workflows/ci.yml/badge.svg)](https://github.com/ImJustRicky/capsule/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white)](https://nodejs.org)
 [![pnpm](https://img.shields.io/badge/pnpm-9-F69220?logo=pnpm&logoColor=white)](https://pnpm.io)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-[![Status: V1 draft](https://img.shields.io/badge/status-V1%20draft-orange)](PLAN.md#milestones)
+[![Status: V1 draft](https://img.shields.io/badge/status-V1%20draft-orange)](PLAN.md#roadmap)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
-[Quick start](#quick-start) · [How it works](#how-it-works) · [Security model](#security-model-v1) · [Spec](docs/CAPSULE-1.0-DRAFT.md) · [Examples](examples) · [Installers](installers) · [Contributing](CONTRIBUTING.md)
+[Try it](#try-it) · [Make and share one](#make-and-share-a-capsule) · [How opening works](#how-opening-works) · [Security](#security-model) · [Spec](docs/CAPSULE-1.0-DRAFT.md) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -26,205 +27,170 @@ PDFs made documents portable.
 Capsules make interactive documents portable.
 ```
 
-`.capsule` is an open format for interactive documents. A capsule is a self-contained zip archive with a manifest, content, and integrity metadata. It opens offline, runs inside a strict sandbox, and declares every capability it wants up front. **You see the contract before you click Run.**
+AI tools now produce a steady stream of small, useful apps: calculators, checklists, explainers, tiny games. Sharing one usually means "here's an HTML file, trust me" or "go to this link". Capsule is a third option: **one file you can email, drop in a chat, or put on a USB stick**, that opens offline, shows a plain-language list of what it can and can't do, and runs with no access to your files, network, or anything else unless the file asks and you agree.
 
-## Why
+## Try it
 
-Most software sharing collapses into one of two bad shapes: a static file that cannot do much, or an installable app that gets too much trust. Capsule sits between them.
+Open the hosted viewer and pick an example. Nothing is uploaded: the file is opened, checked, and run inside your browser tab.
 
-- **One file to share.** Email it, drop it in chat, stick it on a flash drive.
-- **Offline.** No server required after download.
-- **Inspectable before it runs.** The runtime shows what it can and cannot do, every time.
-- **Sandboxed by default.** No ambient access to your files, clipboard, network, shell, environment, or tokens.
-- **Explicit capabilities.** Network access must be allowlisted per host in the manifest. The user confirms each grant.
-- **Forkable with provenance.** Content is hashed canonically; authors can sign.
+**[imjustricky.github.io/capsule](https://imjustricky.github.io/capsule/)**
 
-## Security model (V1)
+Or open an example directly:
+[Pocket Notes](https://imjustricky.github.io/capsule/?src=examples/pocket-notes.capsule) ·
+[Offline Checklist](https://imjustricky.github.io/capsule/?src=examples/offline-checklist.capsule) ·
+[Poster Maker](https://imjustricky.github.io/capsule/?src=examples/poster-maker.capsule) ·
+[Mortgage Calculator](https://imjustricky.github.io/capsule/?src=examples/mortgage-calculator.capsule)
 
-Opening a capsule is inert. Capabilities are always denied by default and mediated by the host runtime. Capsules **cannot**:
+> The hosted viewer is deployed by [`.github/workflows/pages.yml`](.github/workflows/pages.yml). It needs GitHub Pages enabled for the repository (Settings → Pages → Source: **GitHub Actions**).
 
-- read arbitrary files
+## Make and share a capsule
+
+> **Requirements for making capsules:** Node 20+ and pnpm 9+. Opening them needs only a browser.
+
+```bash
+pnpm install && pnpm -r build
+alias capsule="node $(pwd)/packages/capsule-cli/bin/capsule.mjs"
+```
+
+Turn any single web page into a capsule. Single-file apps from AI tools work as they are, inline scripts included:
+
+```bash
+capsule make my-app.html --html
+```
+
+That writes two files:
+
+| File | What it's for |
+| --- | --- |
+| `my-app.capsule` | The capsule itself: a zip with the page, a manifest, and an integrity hash. |
+| `my-app.capsule.html` | A **self-opening** copy. Double-click it and it opens in any modern browser. Send this one to people who've never heard of Capsule. |
+
+The name comes from the page's `<title>`. Other ways in:
+
+```bash
+capsule make ./my-site                       # a folder with index.html
+capsule make field-notes --template checklist # start from a template
+capsule share my-app.capsule                  # make a self-opening copy of an existing capsule
+capsule inspect my-app.capsule.html           # see what's inside without running it
+```
+
+A capsule that needs more than its own window declares it in `capsule.json`: saving its own data, opening or saving files you choose, copying to the clipboard, pop-up messages, or connecting to specific websites. See the [authoring guide](docs/AUTHORING-GUIDE.md).
+
+## How opening works
+
+There are three ways to open a capsule. All of them show the same Open Screen first and enforce the same rules.
+
+| | Install needed | Who it's for |
+| --- | --- | --- |
+| **Hosted viewer** | None | Anyone. Drop a `.capsule` or `.capsule.html` file on the page. |
+| **Self-opening `.capsule.html`** | None | Recipients. The viewer travels inside the file. |
+| **`capsule run`** (desktop) | Node 20+ and Chrome/Chromium | Authors and power users. Also used by the optional [OS installers](installers). |
+
+**About self-opening files:** they are convenient, but whoever made the file also made the viewer inside it. A self-opening file is exactly as safe as opening any web page, no more. The viewer says so on screen. If you don't trust the sender, check the file with code you trust: drop it on the hosted viewer, or run `capsule inspect file.capsule.html`. Both pull out the embedded archive and verify it themselves.
+
+How the browser viewer works, and what it can't do, is in [`docs/WEB-VIEWER.md`](docs/WEB-VIEWER.md).
+
+## Security model
+
+Opening a capsule is inert. Before anything runs, the runtime validates the archive, checks the manifest against the schema, and verifies the content hash; a capsule whose contents don't match its declared hash is refused. Capabilities are denied by default and mediated by the host. Capsules **cannot**:
+
+- read arbitrary files (only files you pick, if they asked)
 - read the clipboard
-- run shell commands
-- contact the network unless the manifest allowlists specific hosts
+- run programs or shell commands
+- contact the network, unless the manifest allowlists specific hosts and you allow it
+- reach localhost or private-network addresses, even if allowlisted
 - read environment variables, cookies, tokens, or `$HOME`
-- update themselves silently
-- access camera, microphone, or location
+- update themselves
+- use the camera, microphone, or location
 
-> Full details: [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md).
+Capsule code runs in an opaque-origin sandboxed iframe under a strict Content-Security-Policy with `connect-src 'none'`; every capability call crosses a `postMessage` bridge to the host, which checks it against the manifest and asks you.
 
-## Quick start
-
-> **Requirements:** Node 20+, pnpm 9+
-
-```bash
-# install + build
-pnpm install
-pnpm -r build
-
-# easiest path: make a capsule from a starter template
-node packages/capsule-cli/bin/capsule.mjs make hello --template checklist
-
-# or package an existing folder with index.html
-node packages/capsule-cli/bin/capsule.mjs make ./my-site --name "My Site"
-
-# inspect it (no execution)
-node packages/capsule-cli/bin/capsule.mjs inspect hello.capsule
-
-# run it in a sandboxed window
-node packages/capsule-cli/bin/capsule.mjs run hello.capsule
-```
-
-> **Tip:** add a shell alias so you can drop the prefix:
-> ```bash
-> alias capsule="node $(pwd)/packages/capsule-cli/bin/capsule.mjs"
-> ```
-
-## First launch after installing from a download
-
-The v0.1.x release artifacts are **not yet code-signed** (the signing
-pipeline is wired up in [`release.yml`](.github/workflows/release.yml) but
-the Apple Developer / Authenticode secrets aren't populated). Until they
-are, your OS will flag the downloaded installers. One-time workarounds:
-
-### macOS — Capsule.dmg
-
-When you drag `Capsule.app` from the DMG to `/Applications`, the OS tags it
-with a quarantine flag. Double-clicking it then fails **silently** — no
-error dialog, no logs, just nothing.
-
-Strip the quarantine and re-register the app:
-
-```bash
-sudo xattr -dr com.apple.quarantine /Applications/Capsule.app
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister \
-  -f /Applications/Capsule.app
-```
-
-Then double-click any `.capsule` file — the sandbox window opens.
-
-Alternatively, right-click `Capsule.app` → **Open** → **Open** once. After
-that macOS remembers your decision.
-
-### Windows — capsule-*-windows.zip
-
-SmartScreen shows a blue **"Windows protected your PC"** dialog on first
-run. Click **More info → Run anyway** once.
-
-PowerShell may also refuse to run `install.ps1` due to the Execution
-Policy. Use the bypass flag:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-### Linux — capsule-*-linux.tar.gz
-
-No signing friction. Extract the tarball and run `sudo ./install.sh`.
-
----
-
-Once the release is signed (Apple notarization + Authenticode), these
-workarounds go away for end users. See [`docs/RELEASE.md`](docs/RELEASE.md)
-for how signing is configured.
+> Full details: [`docs/SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) and [`docs/WEB-VIEWER.md`](docs/WEB-VIEWER.md#security).
 
 ## How it works
 
-`capsule run` starts a short-lived HTTP server bound to `127.0.0.1` on a random port with an unguessable path token, then opens a chromeless browser window with the **Open Screen**. The capsule HTML loads inside a sandboxed `<iframe>` with a strict Content-Security-Policy. All capability calls cross a `postMessage` bridge to the host, which enforces the manifest.
-
 ```text
-┌───────────────────────────────┐
-│   Open Screen (host page)     │  ← shows what the capsule can/can't do
-│   ┌─────────────────────────┐ │
-│   │  Capsule iframe         │ │  ← strict CSP, sandboxed
-│   │  • no network           │ │
-│   │  • no shell             │ │
-│   │  • no ambient access    │ │
-│   └─────────────────────────┘ │
-└───────────────────────────────┘
-              ▲
-              │ postMessage bridge
-              ▼
-┌───────────────────────────────┐
-│  Local runtime server         │  ← mediates every capability call
-│  127.0.0.1:<random>           │
-└───────────────────────────────┘
+            ┌─────────────────────────────────────────┐
+  .capsule  │  Host (trusted)                         │
+  ───────►  │  • reads + validates the zip            │
+            │  • checks manifest, verifies hash       │
+            │  • shows the Open Screen                │
+            │  • mediates every capability request    │
+            │   ┌─────────────────────────────────┐   │
+            │   │  Capsule (untrusted)            │   │
+            │   │  sandboxed iframe, null origin  │   │
+            │   │  CSP: connect-src 'none'        │   │
+            │   └──────────────┬──────────────────┘   │
+            │                  │ postMessage bridge   │
+            └──────────────────┴──────────────────────┘
 ```
+
+There are two hosts that share the same bridge (`bridge.js`), CSP, and rules:
+
+- **Browser viewer** ([`capsule-web`](packages/capsule-web)): everything in one HTML file. It reads the zip with the browser's own decompressor, hashes with WebCrypto, and renders the capsule from `srcdoc` with each local file inlined.
+- **Node runtime** ([`capsule-runtime`](packages/capsule-runtime)): a short-lived server on `127.0.0.1` with an unguessable path token, opened in a chromeless browser window. It proxies `network.fetch`, so the target site doesn't have to allow CORS.
 
 ## Packages
 
 | Package | Purpose |
 | --- | --- |
-| [`capsule-core`](packages/capsule-core) | Format library: manifest schema, archive reader, path rules, deterministic packer, canonical content hash |
-| [`capsule-runtime`](packages/capsule-runtime) | Sandbox host: HTTP server, Open Screen UI, capability bridge, permission prompts, receipts |
-| [`capsule-cli`](packages/capsule-cli) | Author tooling: `make`, `pack`, `inspect`, `verify`, `run`, `receipts` |
+| [`capsule-core`](packages/capsule-core) | Format library: manifest schema, archive reader, path rules, deterministic packer, canonical content hash, self-opening wrapper. Its `@capsule/core/browser` entry is shared with the browser viewer. |
+| [`capsule-web`](packages/capsule-web) | Zero-install browser viewer, also the template for self-opening `.capsule.html` files |
+| [`capsule-runtime`](packages/capsule-runtime) | Node sandbox host: HTTP server, Open Screen, capability bridge, permission prompts, receipts |
+| [`capsule-cli`](packages/capsule-cli) | Author tooling: `make`, `share`, `pack`, `inspect`, `verify`, `run`, `receipts` |
 
 ## Examples
 
-The [`examples/`](examples) directory contains reference capsules that exercise the format and capability model. Each is a plain directory you can `capsule pack` and `capsule run`.
+The [`examples/`](examples) directory contains reference capsules:
 
-- [`pocket-notes`](examples/pocket-notes) — polished markdown notepad with live preview, persists drafts via `storage.local`
-- [`offline-checklist`](examples/offline-checklist) — local-only checklist that uses `storage.local`
-- [`mortgage-calculator`](examples/mortgage-calculator) — pure-compute capsule, no capabilities
-- [`poster-maker`](examples/poster-maker) — canvas drawing, no network
+- [`pocket-notes`](examples/pocket-notes): markdown notepad with live preview; saves drafts with `storage.local`
+- [`offline-checklist`](examples/offline-checklist): checklist that remembers itself with `storage.local`
+- [`mortgage-calculator`](examples/mortgage-calculator): pure computation, asks for nothing
+- [`poster-maker`](examples/poster-maker): canvas drawing with PNG export through `filesystem.export`
 
 ## Standards draft
 
-The format is documented as a standards draft in [`docs/`](docs/). The V1 implementation treats these files as the source of truth:
+The format is documented independently of this implementation, so other runtimes can implement it:
 
 | Document | Scope |
 | --- | --- |
 | [`CAPSULE-1.0-DRAFT.md`](docs/CAPSULE-1.0-DRAFT.md) | High-level standard |
-| [`ARCHIVE-FORMAT.md`](docs/ARCHIVE-FORMAT.md) | `.capsule` archive layout |
+| [`ARCHIVE-FORMAT.md`](docs/ARCHIVE-FORMAT.md) | `.capsule` archive layout and the self-opening wrapper |
 | [`MANIFEST.md`](docs/MANIFEST.md) | `capsule.json` fields |
 | [`MANIFEST-1.0.schema.json`](docs/MANIFEST-1.0.schema.json) | JSON Schema |
 | [`CAPABILITY-MODEL.md`](docs/CAPABILITY-MODEL.md) | Permission system |
 | [`SECURITY-MODEL.md`](docs/SECURITY-MODEL.md) | Sandbox and threat model |
 | [`SIGNING-AND-INTEGRITY.md`](docs/SIGNING-AND-INTEGRITY.md) | Hashing, signatures, provenance |
 | [`RUNTIME-CONFORMANCE.md`](docs/RUNTIME-CONFORMANCE.md) | What a compatible runtime must do |
-| [`OS-INTEGRATION.md`](docs/OS-INTEGRATION.md) | File extension, MIME, icons |
-| [`AUTHORING-GUIDE.md`](docs/AUTHORING-GUIDE.md) | How to make safe capsules |
+| [`WEB-VIEWER.md`](docs/WEB-VIEWER.md) | How the browser runtime works, its guarantees and limits |
+| [`OS-INTEGRATION.md`](docs/OS-INTEGRATION.md) | File extension, MIME type, icons |
+| [`AUTHORING-GUIDE.md`](docs/AUTHORING-GUIDE.md) | How to make safe capsules, including from AI tools |
 | [`RELEASE.md`](docs/RELEASE.md) | How releases are built, signed, and verified |
 
-## Making capsules
+## Desktop integration (optional)
 
-For most authors, start with `capsule make`. It creates a template project when the path does not exist, or packages an existing web folder when it does.
-
-```bash
-capsule make my-checklist --template checklist
-capsule make ./dist --name "Interactive Report"
-capsule make --list-templates
-```
-
-Use `capsule pack` when you already have a complete Capsule project with an authored `capsule.json` and want strict deterministic packaging.
+The [OS installers](installers) register Capsule as the handler for `.capsule` files, so double-clicking one opens it in the Node runtime. They're optional: the browser viewer and self-opening files cover most people. The v0.1.x installers are not yet code-signed, so your OS will warn on first launch; the one-time workarounds are in [`installers/README.md`](installers/README.md#first-launch-from-an-unsigned-release).
 
 ## Development
 
 ```bash
 pnpm install
-pnpm -r build       # build all packages (capsule-core first via workspace deps)
-pnpm -r test        # vitest across all packages
-pnpm -r typecheck   # tsc --noEmit across all packages
+pnpm -r build                              # all packages; capsule-core builds first
+pnpm -r typecheck
+pnpm -r test                               # unit + cross-runtime conformance tests
+pnpm --filter @capsule/web test:e2e        # browser end-to-end tests (Playwright + Chromium)
 ```
 
-Tests, type checks, and builds all run in CI on Ubuntu and macOS against Node 20 and 22. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+CI runs the build, type checks, and unit tests on Ubuntu and macOS with Node 20 and 22, plus the browser end-to-end suite on Ubuntu. See [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## Status
 
-V1 reference implementation. The format spec is a draft, not frozen. Breaking changes are possible before 1.0. See [milestones](PLAN.md#milestones) for current progress.
+V1 reference implementation. The format spec is a draft, not frozen, so breaking changes are possible before 1.0. See the [roadmap](PLAN.md#roadmap).
 
 ## Contributing
 
-Contributions are welcome — bugs, features, examples, and spec feedback. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the workflow.
+Contributions are welcome: bugs, features, examples, and spec feedback. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE). Capsule is intended to be implementable by more than one runtime — the format, manifest, and behavior are documented independently of this implementation.
-
----
-
-<div align="center">
-
-If Capsule is useful to you, consider starring the repo to help others find it.
-
-</div>
+[MIT](LICENSE). Capsule is meant to be implementable by more than one runtime: the format, manifest, and behavior are documented independently of this implementation.

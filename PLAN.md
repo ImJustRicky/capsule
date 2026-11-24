@@ -45,6 +45,16 @@ Security is the product.
 - Permissions are revocable per capsule.
 - Every run records a local receipt.
 
+## Distribution Is the Product, Too
+
+A format only matters if the person receiving the file can open it. PDFs became universal because a reader ended up everywhere. Capsule's answer is to need no reader install at all:
+
+1. **Hosted browser viewer.** A static page anyone can drop a capsule on.
+2. **Self-opening `.capsule.html`.** The viewer travels inside the file, so a recipient double-clicks it and it opens in their browser.
+3. **Desktop runtime and OS installers.** Optional, for authors and power users.
+
+The strongest wedge is AI-made software: tools now produce endless small single-file apps, and there is no safe way to send one. `capsule make page.html --html` turns any of them into something you can send to anyone.
+
 ## MVP Runtime
 
 V1 should use a web sandbox, not native execution.
@@ -162,10 +172,10 @@ Pick demos that make the format feel real without needing risky permissions.
 
 ```text
 packages/
-  capsule-core/       manifest parser, archive reader, hashing
-  capsule-runtime/    sandbox host and capability bridge
-  capsule-cli/        create, inspect, pack, run, verify
-  capsule-desktop/    Electron/Tauri cockpit later
+  capsule-core/       manifest parser, archive reader, hashing, self-opening wrapper
+  capsule-web/        zero-install browser viewer (hosted page + .capsule.html template)
+  capsule-runtime/    Node sandbox host and capability bridge
+  capsule-cli/        make, share, pack, inspect, verify, run
 examples/
   mortgage-calculator/
   poster-maker/
@@ -190,6 +200,7 @@ Start with `docs/README.md`, then treat these as the implementation source of tr
 - `docs/RUNTIME-CONFORMANCE.md`
 - `docs/OS-INTEGRATION.md`
 - `docs/AUTHORING-GUIDE.md`
+- `docs/WEB-VIEWER.md`
 
 ## CLI Sketch
 
@@ -199,20 +210,45 @@ capsule pack ./mortgage-calculator
 capsule inspect mortgage-calculator.capsule
 capsule run mortgage-calculator.capsule
 capsule verify mortgage-calculator.capsule
+capsule share mortgage-calculator.capsule   # self-opening .capsule.html
+capsule make page.html --html                # any single web page, e.g. from an AI tool
 ```
 
-## Milestones
+## Roadmap
 
-1. Define manifest schema and archive format.
-2. Build `capsule inspect` for local `.capsule` files.
-3. Build `capsule pack` with deterministic hashing.
-4. Build web sandbox runner with no host capabilities.
-5. Add `storage.local`.
-6. Add user-picked import/export.
-7. Add allowlisted `network.fetch`.
-8. Add receipt log.
-9. Build first three demo capsules.
-10. Add desktop open screen.
+### Done
+
+1. Manifest schema and archive format.
+2. `capsule inspect` for local `.capsule` files.
+3. `capsule pack` with deterministic hashing.
+4. Web sandbox runner with no host capabilities.
+5. `storage.local`.
+6. User-picked import/export.
+7. Allowlisted `network.fetch`.
+8. Receipt log.
+9. First demo capsules.
+10. Open Screen.
+11. **Zero-install browser viewer**, sharing path rules, hashing, schema, and the bridge with the Node runtime, and covered by cross-runtime conformance tests.
+12. **Self-opening `.capsule.html`** (`capsule share`, `capsule make --html`), accepted by every runtime as input.
+13. **Single-file apps run as they are.** Inline scripts are allowed, and the name is taken from `<title>`.
+
+### Now
+
+- Publish the hosted viewer (GitHub Pages workflow is in place; Pages must be enabled for the repository).
+- Get capsules into people's hands: share real AI-made apps as `.capsule.html` and watch what breaks.
+- A conformance fixture set (`fixtures/*.capsule`) and `capsule inspect --json`, so third-party runtimes can test themselves.
+
+### Next
+
+- "Export as capsule" for AI tools: a documented prompt, plus an MCP server or plugin that returns a `.capsule.html`.
+- Author signatures (the format reserves `signatures/`) and showing who signed on the Open Screen.
+- Persistent, revocable grants tied to signer and content identity.
+- Restyle the Node runtime's Open Screen to match the browser viewer.
+
+### Paused
+
+- Code-signed OS installers and notarization. The pipeline exists ([docs/RELEASE.md](docs/RELEASE.md)), but signing certificates only pay off once people are double-clicking `.capsule` files. Until then the browser paths cover recipients with zero install.
+- A dedicated desktop app (Electron or Tauri).
 
 ## Anti-Goals
 

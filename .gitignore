@@ -56,3 +56,4 @@ docs/assets/*-original.*
 
 # Generated sources
 packages/capsule-web/src/generated/
+/packages/capsule-web/site/

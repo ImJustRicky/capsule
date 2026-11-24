@@ -15,6 +15,15 @@ There can be many runtimes:
 
 They should all agree on the same safety contract.
 
+The project ships two reference runtimes that do:
+
+| Runtime | Package | Level | Notes |
+| --- | --- | --- | --- |
+| Node runtime (`capsule run`) | `capsule-runtime` | 2 | Local server on `127.0.0.1`; proxies `network.fetch` and resolves DNS before connecting. |
+| Browser viewer | `capsule-web` | 2 | Single HTML file, no install. `network.fetch` targets must allow CORS; see [WEB-VIEWER.md](./WEB-VIEWER.md#limits). |
+
+Both accept self-opening `.capsule.html` files as input and verify the embedded archive with their own code ([ARCHIVE-FORMAT.md](./ARCHIVE-FORMAT.md#self-opening-wrapper)). A cross-implementation test suite checks that both produce identical archive entries, content hashes, and manifest decisions for the same input.
+
 ## Conformance Levels
 
 ### Level 0: Inspector
@@ -95,6 +104,7 @@ A conforming runtime MUST reject:
 - unknown required feature
 - unsupported required capability
 - integrity mismatch
+- a self-opening wrapper with zero or more than one payload element
 
 ## Required Warnings
 

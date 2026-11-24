@@ -4,6 +4,14 @@ Per-platform installers that register `Capsule` as the system handler for
 `.capsule` files, so users can **double-click** a capsule in their file
 manager and have it open in the sandboxed runtime.
 
+> **These are optional.** Most people never need them: the
+> [hosted browser viewer](https://imjustricky.github.io/capsule/) opens any
+> capsule with nothing installed, and a self-opening `.capsule.html`
+> (`capsule share`) opens by double-click in any browser. Installers are for
+> authors and power users who want `.capsule` files to open in the desktop
+> runtime. Code signing is paused until that's worth the certificates; see
+> the [roadmap](../PLAN.md#roadmap).
+
 | Platform | Folder | Install command |
 | --- | --- | --- |
 | macOS | [`macos/`](macos) | `./installers/macos/build.sh && ./installers/macos/install.sh` |

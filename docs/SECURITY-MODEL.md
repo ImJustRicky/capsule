@@ -41,7 +41,7 @@ V1 does not fully solve:
 - phishing inside the capsule UI
 - user-approved data exfiltration
 - vulnerabilities in the underlying browser engine
-- malicious runtimes
+- malicious runtimes, including the viewer inside a self-opening `.capsule.html` (see [Self-Opening Files](#self-opening-files))
 
 ## Inert Preview Requirement
 
@@ -83,25 +83,32 @@ If the runtime uses Electron, it MUST:
 
 ## Content Security Policy
 
-Runtimes SHOULD enforce a strict CSP.
+Runtimes SHOULD enforce a strict CSP on capsule content.
 
 Baseline:
 
 ```text
 default-src 'none';
-script-src 'self';
+script-src 'self' 'unsafe-inline';
 style-src 'self' 'unsafe-inline';
 img-src 'self' data: blob:;
-font-src 'self';
-connect-src <declared allowlist>;
-worker-src 'self';
+media-src 'self' data: blob:;
+font-src 'self' data: blob:;
+connect-src 'none';
+worker-src 'none';
 frame-src 'none';
 object-src 'none';
 base-uri 'none';
 form-action 'none';
 ```
 
+`connect-src` is `'none'` even for capsules that request `network.fetch`: network access always goes through the host's capability bridge, which enforces the allowlist. A runtime that lets capsule content connect directly MUST limit `connect-src` to the declared allowlist.
+
+**Why `'unsafe-inline'` is allowed for scripts.** CSP's script restrictions exist to stop *injected* script running alongside trusted script. In a capsule all of the script is untrusted, so blocking inline script protects nothing; it only breaks single-file apps, the usual output of AI tools. The isolation that matters comes from the opaque-origin sandbox (no `allow-same-origin`) and `connect-src 'none'`. `'unsafe-eval'` stays forbidden.
+
 The runtime may adjust CSP to support specific safe features, but it MUST NOT allow undeclared network hosts.
+
+The browser viewer's CSP, which works on `data:` URLs instead of `'self'`, is documented in [WEB-VIEWER.md](./WEB-VIEWER.md#capsule-document-csp).
 
 ## Network Enforcement
 
@@ -174,6 +181,22 @@ The runtime SHOULD provide global controls:
 - revoke all persistent grants
 - clear all capsule storage
 - open safe mode
+
+## Self-Opening Files
+
+A self-opening `.capsule.html` (see [ARCHIVE-FORMAT.md](./ARCHIVE-FORMAT.md#self-opening-wrapper)) carries its own viewer. The viewer is written by whoever produced the file, so it is **not** a trust boundary: a malicious sender can ship a viewer that misreports what the capsule does. Opening a self-opening file is as safe as opening any web page in the user's browser, and no safer.
+
+Requirements:
+
+- A viewer running from inside a self-opening file MUST tell the user so, and say how to check the file with a runtime they trust.
+- Trusted runtimes MUST accept self-opening files as input, extract the embedded archive, and verify it with their own code (`capsule inspect`, `capsule verify`, the hosted viewer).
+- Extraction MUST refuse files that carry zero or more than one payload element.
+
+## Known Gaps
+
+- **WebRTC.** Most browsers don't apply CSP to `RTCPeerConnection`, so sandboxed content can open a peer connection to a STUN/TURN server and leak data that way. This affects both reference runtimes. Mitigations under consideration: running capsules in a browser profile with WebRTC disabled (Node runtime), and the `webrtc 'block'` CSP directive where browsers implement it.
+- **DNS rebinding in the browser viewer.** Browsers can't resolve DNS, so the viewer blocks only *literal* private and local addresses. The Node runtime resolves and checks every address.
+- **Social engineering.** A capsule can still ask for a capability with a misleading reason. The Open Screen shows the author's reason verbatim and labelled as the author's words.
 
 ## Safe Mode
 

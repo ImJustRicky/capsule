@@ -74,6 +74,41 @@ Run it:
 capsule run ./my-capsule.capsule
 ```
 
+## From an AI Tool
+
+Most AI tools produce a single HTML file with inline styles and scripts. That is already a valid capsule entry:
+
+```bash
+capsule make my-app.html --html
+```
+
+This writes `my-app.capsule` and a self-opening `my-app.capsule.html`, and takes the display name from the page's `<title>`. Inline `<script>` and `on*` handlers are allowed; see [SECURITY-MODEL.md](./SECURITY-MODEL.md#content-security-policy) for why that is safe.
+
+What to check before sharing:
+
+- **Remove CDN links.** `<script src="https://cdn…">`, web fonts, and remote images are blocked by the sandbox. Inline the library, or ask the AI tool for a version with no external dependencies.
+- **No `fetch()` of your own files.** Capsule content cannot make network requests, including to files inside the capsule. Inline small data as a JS object instead.
+- **No `localStorage`.** The sandbox blocks it. Use `window.capsule.request("storage.local", "get" | "set", …)` and declare `storage.local` in `capsule.json`.
+- **No `eval` or `new Function`.** Both are blocked in every runtime.
+
+A prompt that tends to produce capsule-ready output:
+
+```text
+Make this as a single self-contained HTML file: no external scripts, fonts,
+images, or network requests, no localStorage, no eval. Inline all CSS and JS.
+```
+
+## Works Everywhere
+
+Capsules run in two reference runtimes: the Node runtime (`capsule run`) and the zero-install browser viewer. A capsule that follows these rules behaves the same in both:
+
+- Reference assets from HTML or CSS (`<img src>`, `url()`), not by building URLs in JavaScript. The browser viewer inlines declarative references only.
+- Bundle ES modules into one file. Relative `import`s between files don't resolve in the browser viewer.
+- Don't ship your own CSP `<meta>`; the runtime provides one.
+- For `network.fetch`, prefer APIs that send CORS headers. The browser viewer fetches directly; only the Node runtime proxies.
+
+Details: [WEB-VIEWER.md](./WEB-VIEWER.md#limits).
+
 ## Authoring Rules
 
 1. Work offline by default.
@@ -198,13 +233,21 @@ Before sharing:
 
 - `capsule inspect` passes
 - `capsule verify` passes
+- it runs in the browser viewer, not just `capsule run` (open the `.capsule.html`)
 - no undeclared network use
+- no external scripts, fonts, or images
 - no broken asset paths
 - no oversized unused assets
 - all permission reasons are specific
 - safe mode preview looks correct
 - source notes are included
 - signature is attached if publishing publicly
+
+To send it to someone without Capsule, share the self-opening copy:
+
+```bash
+capsule share my-app.capsule      # writes my-app.capsule.html
+```
 
 ## Example README Text
 

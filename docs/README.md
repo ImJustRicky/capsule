@@ -26,7 +26,9 @@ The V1 implementation should treat these files as the source of truth:
 - [SIGNING-AND-INTEGRITY.md](./SIGNING-AND-INTEGRITY.md): hashing, signatures, provenance
 - [RUNTIME-CONFORMANCE.md](./RUNTIME-CONFORMANCE.md): what a compatible runtime must do
 - [OS-INTEGRATION.md](./OS-INTEGRATION.md): file extension, MIME, icons, previews
-- [AUTHORING-GUIDE.md](./AUTHORING-GUIDE.md): how to make safe capsules
+- [AUTHORING-GUIDE.md](./AUTHORING-GUIDE.md): how to make safe capsules, including from AI tools
+- [WEB-VIEWER.md](./WEB-VIEWER.md): the zero-install browser runtime, its guarantees and limits
+- [RELEASE.md](./RELEASE.md): how releases are built, signed, and verified
 
 ## Design Principles
 
@@ -57,9 +59,11 @@ example.capsule
 
 `capsule.json` is the manifest. It defines the entry point, requested capabilities, network policy, integrity metadata, author information, and human-readable purpose.
 
+A capsule can also travel as a **self-opening** `name.capsule.html`: the same archive embedded in a copy of the browser viewer, so it opens in any browser with nothing installed. See [ARCHIVE-FORMAT.md](./ARCHIVE-FORMAT.md#self-opening-wrapper).
+
 ## V1 Runtime Summary
 
-The reference runtime should:
+There are two reference runtimes: the browser viewer (no install; [WEB-VIEWER.md](./WEB-VIEWER.md)) and the Node runtime behind `capsule run`. Each should:
 
 - open `.capsule` archives
 - validate archive structure
