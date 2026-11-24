@@ -1,60 +1,13 @@
-import Ajv, { type ErrorObject, type ValidateFunction } from "ajv";
+import Ajv, { type ValidateFunction } from "ajv";
 import addFormats from "ajv-formats";
 import schema from "./manifest.schema.json" with { type: "json" };
 import { CapsuleError, ErrorCode } from "./errors.js";
-import { validateArchivePath } from "./paths.js";
+import { checkManifestSemantics, formatSchemaErrors } from "./manifest-checks.js";
+import type { CapsuleManifest } from "./manifest-types.js";
 
-export type CapabilityName =
-  | "storage.local"
-  | "filesystem.import"
-  | "filesystem.export"
-  | "clipboard.write"
-  | "network.fetch"
-  | "dialog.open";
-
-export interface PermissionRequest {
-  capability: CapabilityName;
-  scope: string | string[];
-  reason: string;
-  required?: boolean;
-}
-
-export interface CapsuleManifest {
-  capsule_version: "1.0";
-  name: string;
-  slug: string;
-  version: string;
-  description: string;
-  entry: string;
-  author?: { name?: string; id?: string; url?: string };
-  permissions: PermissionRequest[];
-  network: { default: "deny"; allow: string[] };
-  features?: { required?: string[]; optional?: string[] };
-  integrity?: { content_hash: string; algorithm: "sha256" };
-  display?: {
-    icon?: string;
-    accent_color?: string;
-    preferred_size?: { width: number; height: number };
-  };
-  license?: { name?: string; url?: string };
-  source?: { url?: string; path?: string };
-  privacy?: { summary?: string; data_stored?: string[]; data_shared?: string[] };
-}
+export type { CapabilityName, PermissionRequest, CapsuleManifest } from "./manifest-types.js";
 
 export const MANIFEST_SCHEMA = schema as unknown as Record<string, unknown>;
-
-const SUPPORTED_REQUIRED_FEATURES = new Set([
-  "archive.zip",
-  "manifest.1.0",
-  "sandbox.web",
-  "integrity.sha256",
-  "capability.storage.local",
-  "capability.filesystem.import",
-  "capability.filesystem.export",
-  "capability.clipboard.write",
-  "capability.network.fetch",
-  "capability.dialog.open",
-]);
 
 let cachedValidator: ValidateFunction<CapsuleManifest> | null = null;
 
@@ -101,31 +54,9 @@ export function parseManifestText(
   }
   const validate = getValidator();
   if (!validate(raw)) {
-    throw new CapsuleError(ErrorCode.ManifestSchema, formatAjvErrors(validate.errors ?? []));
+    throw new CapsuleError(ErrorCode.ManifestSchema, formatSchemaErrors(validate.errors ?? []));
   }
   const manifest = raw as CapsuleManifest;
-  validateArchivePath(manifest.entry);
-  const unsupported = (manifest.features?.required ?? []).filter(
-    (feature) => !SUPPORTED_REQUIRED_FEATURES.has(feature),
-  );
-  if (unsupported.length > 0) {
-    throw new CapsuleError(
-      ErrorCode.ManifestSchema,
-      `unsupported required feature(s): ${unsupported.join(", ")}`,
-    );
-  }
-  if (opts.entries && !opts.entries.has(manifest.entry)) {
-    throw new CapsuleError(
-      ErrorCode.ManifestEntryMissing,
-      `entry file not present in archive: ${manifest.entry}`,
-    );
-  }
+  checkManifestSemantics(manifest, opts.entries ? { entries: opts.entries } : {});
   return manifest;
-}
-
-function formatAjvErrors(errors: ErrorObject[]): string {
-  if (errors.length === 0) return "manifest failed schema validation";
-  return errors
-    .map((e) => `${e.instancePath || "(root)"} ${e.message ?? "invalid"}`)
-    .join("; ");
 }

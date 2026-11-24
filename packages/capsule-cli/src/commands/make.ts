@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { packArchive, type CapsuleManifest, type PackFile } from "@capsule/core";
+import { defaultSharePath, writeSelfOpeningHtml } from "./share.js";
 
 type TemplateName = "blank" | "checklist" | "calculator";
 
@@ -23,6 +24,7 @@ interface MakeArgs {
   versionProvided: boolean;
   template: TemplateName | undefined;
   force: boolean;
+  html: boolean;
   noPack: boolean;
   listTemplates: boolean;
   help: boolean;
@@ -40,6 +42,7 @@ Examples:
   capsule make my-checklist --template checklist
   capsule make ./site --name "Field Guide"
   capsule make ./dist --out field-guide.capsule
+  capsule make page.html --html          # also write a self-opening page.capsule.html
   capsule make --list-templates
 
 Options:
@@ -49,7 +52,8 @@ Options:
   --slug <slug>            stable lowercase id
   --version <version>      author version (default: 0.1.0)
   -o, --out <file>         output path; must end in .capsule
-  --force                  overwrite an existing output .capsule
+  --force                  overwrite existing output files
+  --html                   also write a self-opening .capsule.html that opens in any browser
   --no-pack                create the project folder but do not package it
   --list-templates         show starter templates
 `;
@@ -74,6 +78,10 @@ export async function make(argv: string[]): Promise<number> {
   }
   if (args.noPack && args.out) {
     process.stderr.write("--out cannot be used with --no-pack\n");
+    return 2;
+  }
+  if (args.noPack && args.html) {
+    process.stderr.write("--html cannot be used with --no-pack\n");
     return 2;
   }
 
@@ -178,18 +186,32 @@ async function makeFromDirectory(sourceDir: string, args: MakeArgs): Promise<num
 
     if (standardEntry) {
       files = await collectProjectFiles(sourceDir);
+      const title = extractHtmlTitle(await fs.readFile(path.join(sourceDir, standardEntry), "utf8"));
       files.push({
         path: "capsule.json",
         bytes: encodeManifest(
-          inferredManifest(sourceDir, args, standardEntry.split(path.sep).join("/")),
+          inferredManifest(args, {
+            entry: standardEntry.split(path.sep).join("/"),
+            slugSeed: path.basename(sourceDir),
+            title,
+            sourceLabel: path.basename(sourceDir),
+          }),
         ),
       });
     } else if (rootEntry) {
       files = await collectProjectFiles(sourceDir, "content");
       const entryName = path.basename(rootEntry);
+      const title = extractHtmlTitle(await fs.readFile(path.join(sourceDir, rootEntry), "utf8"));
       files.push({
         path: "capsule.json",
-        bytes: encodeManifest(inferredManifest(sourceDir, args, `content/${entryName}`)),
+        bytes: encodeManifest(
+          inferredManifest(args, {
+            entry: `content/${entryName}`,
+            slugSeed: path.basename(sourceDir),
+            title,
+            sourceLabel: path.basename(sourceDir),
+          }),
+        ),
       });
     } else {
       process.stderr.write(
@@ -222,18 +244,17 @@ async function makeFromFile(sourceFile: string, args: MakeArgs): Promise<number>
   const entryName = path.basename(sourceFile).toLowerCase().endsWith(".htm")
     ? "index.htm"
     : "index.html";
-  const sourceDir = path.dirname(sourceFile);
   const files: PackFile[] = [
     { path: `content/${entryName}`, bytes: new Uint8Array(bytes) },
     {
       path: "capsule.json",
       bytes: encodeManifest(
-        inferredManifest(
-          sourceDir,
-          args,
-          `content/${entryName}`,
-          path.basename(sourceFile, path.extname(sourceFile)),
-        ),
+        inferredManifest(args, {
+          entry: `content/${entryName}`,
+          slugSeed: path.basename(sourceFile, path.extname(sourceFile)),
+          title: extractHtmlTitle(bytes.toString("utf8")),
+          sourceLabel: path.basename(sourceFile),
+        }),
       ),
     },
   ];
@@ -259,11 +280,31 @@ async function writeCapsule(
     return 1;
   }
 
+  let htmlPath: string | null = null;
+  if (args.html) {
+    htmlPath = defaultSharePath(outPath);
+    if (!args.force && (await fs.stat(htmlPath).catch(() => null))) {
+      process.stderr.write(
+        `output already exists: ${prettyPath(htmlPath)}\n` +
+          "Use --force to overwrite it.\n",
+      );
+      return 1;
+    }
+  }
+
   await fs.writeFile(outPath, result.bytes);
+  if (htmlPath) {
+    const written = await writeSelfOpeningHtml(result.bytes, result.manifest, htmlPath, true);
+    if (!written.ok) {
+      process.stderr.write(written.message);
+      return 1;
+    }
+  }
 
   process.stdout.write(
     [
       `made ${prettyPath(outPath)}`,
+      ...(htmlPath ? [`made ${prettyPath(htmlPath)}  (self-opening: works in any browser, nothing to install)`] : []),
       `  name:         ${result.manifest.name}`,
       `  source:       ${context.sourceLabel}`,
       `  entry:        ${result.manifest.entry}`,
@@ -271,6 +312,9 @@ async function writeCapsule(
       `  content_hash: ${result.contentHash}`,
       `  size:         ${formatBytes(result.bytes.byteLength)}`,
       "next:",
+      ...(htmlPath
+        ? [`  send ${shellPath(htmlPath)} to anyone, or open it yourself in a browser`]
+        : [`  capsule share ${shellPath(outPath)}   # make a self-opening .capsule.html to send`]),
       `  capsule inspect ${shellPath(outPath)}`,
       `  capsule run ${shellPath(outPath)}`,
       "",
@@ -294,6 +338,7 @@ function parseArgs(argv: string[]): MakeArgs {
     versionProvided: false,
     template: undefined,
     force: false,
+    html: false,
     noPack: false,
     listTemplates: false,
     help: false,
@@ -308,6 +353,8 @@ function parseArgs(argv: string[]): MakeArgs {
       out.listTemplates = true;
     } else if (a === "--force") {
       out.force = true;
+    } else if (a === "--html") {
+      out.html = true;
     } else if (a === "--no-pack") {
       out.noPack = true;
     } else if (a === "-o" || a === "--out") {
@@ -411,17 +458,23 @@ function applyManifestOverrides(files: PackFile[], args: MakeArgs): PackFile[] {
   });
 }
 
-function inferredManifest(
-  sourceDir: string,
-  args: MakeArgs,
-  entry: string,
-  slugSeed = path.basename(sourceDir),
-): CapsuleManifest {
-  const slug = args.slug ?? slugify(args.name ?? slugSeed);
+interface InferredManifestHints {
+  entry: string;
+  /** Fallback seed for the slug (file or folder name). */
+  slugSeed: string;
+  /** The page's <title>, if it has a usable one. */
+  title: string | undefined;
+  /** Shown in the default description. */
+  sourceLabel: string;
+}
+
+function inferredManifest(args: MakeArgs, hints: InferredManifestHints): CapsuleManifest {
+  const { entry } = hints;
+  const slug = args.slug ?? slugify(args.name ?? hints.title ?? hints.slugSeed);
   return manifestFor({
     slug,
-    name: args.name ?? titleFromSlug(slug),
-    description: args.description ?? `Packaged from ${path.basename(sourceDir)}.`,
+    name: args.name ?? hints.title ?? titleFromSlug(slug),
+    description: args.description ?? `Packaged from ${hints.sourceLabel}.`,
     version: args.version,
     permissions: [],
     privacy: {
@@ -486,15 +539,41 @@ function printTemplates(): void {
 }
 
 function slugify(value: string): string {
-  const slug = value
+  let slug = value
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 64)
     .replace(/-+$/g, "");
+  // Slugs need at least 3 characters; keep short names recognizable
+  // ("ai" -> "ai-capsule") instead of collapsing them all to one default.
+  if (slug.length > 0 && slug.length < 3) slug = `${slug}-capsule`;
   if (SLUG_RE.test(slug)) return slug;
   return "my-capsule";
+}
+
+/**
+ * Pull a usable display name out of an HTML page's <title>. Single-file apps
+ * from AI tools almost always have one, and it beats a name derived from a
+ * file called "index.html" or "output.html".
+ */
+export function extractHtmlTitle(html: string): string | undefined {
+  const match = /<title[^>]*>([\s\S]*?)<\/title\s*>/i.exec(html);
+  if (!match) return undefined;
+  const title = match[1]!
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/&nbsp;|&#0*160;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120)
+    .trim();
+  return title.length > 0 ? title : undefined;
 }
 
 function titleFromSlug(slug: string): string {

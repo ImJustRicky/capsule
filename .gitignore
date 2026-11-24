@@ -53,3 +53,6 @@ docs/assets/*-original.*
 
 # Private working notes (demo scripts, drafts, todo lists)
 .notes/
+
+# Generated sources
+packages/capsule-web/src/generated/

@@ -75,3 +75,21 @@ describe("loadCapsuleFromBuffer", () => {
     await expect(loadCapsuleFromBuffer(buf)).rejects.toThrow(/entry file not present/);
   });
 });
+
+describe("corrupt input", () => {
+  it("surfaces corrupt deflate data and non-ZIP input as coded CapsuleErrors", async () => {
+    const buf = Buffer.from(
+      await buildZip([
+        { path: "capsule.json", content: JSON.stringify(validManifest) },
+        { path: "content/index.html", content: "<p>" + "hello capsule ".repeat(40) + "</p>" },
+      ]),
+    );
+    // Corrupt the compressed body of the second entry.
+    const at = buf.indexOf("content/index.html") + "content/index.html".length + 4;
+    buf.fill(0xff, at, at + 16);
+    await expect(readArchiveFromBuffer(buf)).rejects.toMatchObject({ code: "archive.malformed" });
+    await expect(readArchiveFromBuffer(Buffer.from("not a zip"))).rejects.toMatchObject({
+      code: "archive.malformed",
+    });
+  });
+});

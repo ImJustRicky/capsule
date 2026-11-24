@@ -50,19 +50,22 @@ export function readArchiveFromBuffer(
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   return new Promise((resolve, reject) => {
+    // Every failure leaves this function as a CapsuleError: corrupt input
+    // must produce a clean, coded error, never a raw zlib/yauzl exception.
+    const fail = (err: unknown) => reject(asArchiveError(err));
     yauzl.fromBuffer(buf, { lazyEntries: true }, (err, zip) => {
-      if (err || !zip) return reject(err ?? new Error("failed to open archive"));
+      if (err || !zip) return fail(err ?? new Error("failed to open archive"));
       const entries: ArchiveEntry[] = [];
       const seenPaths = new Set<string>();
       let totalUncompressed = 0;
       let totalCompressed = 0;
 
-      zip.on("error", reject);
+      zip.on("error", fail);
       zip.on("end", () => {
         if (opts.maxCompressionRatio > 0 && totalCompressed > 0) {
           const ratio = totalUncompressed / totalCompressed;
           if (ratio > opts.maxCompressionRatio) {
-            return reject(
+            return fail(
               new CapsuleError(
                 ErrorCode.ArchiveRatioLimit,
                 `archive compression ratio ${ratio.toFixed(1)} exceeds limit ${opts.maxCompressionRatio}`,
@@ -120,7 +123,7 @@ export function readArchiveFromBuffer(
           }
           zip.openReadStream(entry, (readErr, stream) => {
             if (readErr || !stream) {
-              return reject(readErr ?? new Error(`failed to read ${rawName}`));
+              return fail(readErr ?? new Error(`failed to read ${rawName}`));
             }
             const chunks: Buffer[] = [];
             stream.on("data", (c: Buffer) => chunks.push(c));
@@ -134,16 +137,22 @@ export function readArchiveFromBuffer(
               });
               zip.readEntry();
             });
-            stream.on("error", reject);
+            stream.on("error", fail);
           });
         } catch (entryErr) {
-          reject(entryErr);
+          fail(entryErr);
         }
       });
 
       zip.readEntry();
     });
   });
+}
+
+function asArchiveError(err: unknown): CapsuleError {
+  if (err instanceof CapsuleError) return err;
+  const message = err instanceof Error ? err.message : String(err);
+  return new CapsuleError(ErrorCode.ArchiveMalformed, `not a valid capsule archive: ${message}`);
 }
 
 export interface LoadedCapsule {
