@@ -1,7 +1,7 @@
 // Build the single-file browser viewer: bundle src/viewer.ts with esbuild and
-// inline it, together with the shared Open Screen styles, into
-// dist/viewer.html. The same file is the hosted viewer (GitHub Pages) and the
-// template the CLI wraps capsules in for self-opening .capsule.html files.
+// inline it, with src/viewer.css, into dist/viewer.html. The same file is the
+// hosted viewer (GitHub Pages) and the template the CLI wraps capsules in for
+// self-opening .capsule.html files.
 import { promises as fs } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -15,10 +15,9 @@ const runtimeHost = path.join(path.dirname(require.resolve("@capsule/runtime/pac
 
 const HOSTED_VIEWER_URL = process.env.CAPSULE_VIEWER_URL ?? "https://imjustricky.github.io/capsule/";
 
-const [bridgeSource, navShimSource, hostCss, viewerCss, template] = await Promise.all([
+const [bridgeSource, navShimSource, viewerCss, template] = await Promise.all([
   fs.readFile(path.join(runtimeHost, "bridge.js"), "utf8"),
   fs.readFile(path.join(root, "src", "shims", "navigate.js"), "utf8"),
-  fs.readFile(path.join(runtimeHost, "host.css"), "utf8"),
   fs.readFile(path.join(root, "src", "viewer.css"), "utf8"),
   fs.readFile(path.join(root, "src", "viewer.html"), "utf8"),
 ]);
@@ -54,7 +53,7 @@ for (const [label, source] of [["bridge.js", bridgeSource], ["navigate.js", navS
   if (/<\/script/i.test(source)) throw new Error(`${label} contains </script; it is injected inline`);
 }
 
-const css = `${hostCss}\n${viewerCss}`;
+const css = viewerCss;
 if (/<\/style/i.test(css)) throw new Error("viewer CSS contains </style");
 
 let html = template;

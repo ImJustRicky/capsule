@@ -194,7 +194,7 @@ async function run(page) {
 
 async function allowNextPrompt(page) {
   await page.waitForSelector("#permission-dialog[open]", { timeout: 10_000 });
-  const detail = await page.textContent("#perm-detail");
+  const detail = `${await page.textContent("#perm-title")} ${await page.textContent("#perm-detail")}`;
   await page.click("#perm-allow");
   return detail;
 }
@@ -217,8 +217,10 @@ await test("mortgage calculator: opens via ?src, verifies, runs with no capabili
   await page.goto(`${base}?src=examples/mortgage-calculator.capsule`);
   await openScreen(page);
   assert.equal(await page.textContent("#cap-name"), "Mortgage Calculator");
-  assert.match(await page.textContent("#cap-status"), /integrity verified/);
-  assert.match(await page.textContent("#granted-count"), /0 capabilities/);
+  assert.match(await page.textContent("#cap-status"), /Unchanged since it was packed/);
+  assert.equal(await page.$$eval("#can-list li", (els) => els.length), 0);
+  assert.match(await page.textContent("#perms-title"), /can’t reach anything/);
+  assert.equal(await page.textContent("#btn-run-label"), "Run Mortgage Calculator");
   const frame = await run(page);
   await frame.waitForFunction(() => /\$\d/.test(document.body.innerText), null, { timeout: 5000 });
 });
@@ -229,7 +231,7 @@ await test("offline checklist: storage.local prompt, persistence across reloads"
   let frame = await run(page);
   await frame.waitForSelector("input[type=text], input:not([type])");
   const detail = await allowNextPrompt(page);
-  assert.match(detail, /save its own settings/);
+  assert.match(detail, /^Allow Offline Checklist to save data on this device\? The author says: “/);
   const input = await frame.$("input[type=text], input:not([type])");
   await input.fill("Buy milk");
   await input.press("Enter");
@@ -259,7 +261,16 @@ await test("pocket notes: markdown renders inside the sandbox", async (page) => 
 await test("poster maker: canvas app runs; Inspect shows files and activity", async (page) => {
   await page.goto(`${base}?src=examples/poster-maker.capsule`);
   await openScreen(page);
-  assert.match(await page.textContent("#granted-count"), /2 capabilities/);
+  assert.deepEqual(await page.$$eval("#can-list li", (els) => els.map((e) => e.textContent)), [
+    "Save its own data on this device",
+    "Save files where you choose",
+  ]);
+  assert.match(await page.textContent("#cant-text"), /can’t use the internet, see your files, read your clipboard/);
+  // Details expands in place with the author's reasons and the fingerprint.
+  await page.click("#btn-details");
+  assert.equal(await page.getAttribute("#btn-details", "aria-expanded"), "true");
+  assert.match(await page.textContent("#details-list"), /Remember your draft between sessions/);
+  assert.match(await page.textContent("#details-list"), /Fingerprint\s*sha256:[0-9a-f]{64}/);
   const frame = await run(page);
   await allowNextPrompt(page);
   await frame.waitForSelector("canvas");
@@ -278,7 +289,7 @@ await test("sandbox probe: every escape hatch is closed", async (page) => {
   await openScreen(page);
   const frame = await run(page);
   const detail = await allowNextPrompt(page); // network.fetch prompt (declared + in scope)
-  assert.match(detail, /contact specific hosts/);
+  assert.match(detail, new RegExp(`connect to 127\\.0\\.0\\.1:${port}\\?`));
   await frame.waitForSelector("body[data-done='1']", { timeout: 10_000 });
   const out = JSON.parse(await frame.textContent("#out"));
   assert.deepEqual(out, {
@@ -323,7 +334,8 @@ await test("tampered capsule is refused before anything runs", async (page) => {
   await page.goto(`${base}?src=fixtures/tampered.capsule`);
   await page.waitForSelector("#error-screen:not(.hidden)");
   assert.match(await page.textContent("#error-code"), /integrity\.mismatch/);
-  assert.match(await page.textContent("#error-title"), /modified/);
+  assert.match(await page.textContent("#error-title"), /changed after it was packed/);
+  assert.match(await page.textContent("#error-message"), /won’t be run/);
   assert.equal(await page.$("iframe"), null);
 });
 
@@ -332,13 +344,13 @@ await test("drag-free file picker path opens a .capsule.html wrapper", async (pa
   await page.setInputFiles("#file-input", selfOpening);
   await openScreen(page);
   assert.equal(await page.textContent("#cap-name"), "Offline Checklist");
-  assert.match(await page.textContent("#cap-source"), /offline-checklist\.capsule\.html/);
+  await page.click("#btn-details");
+  assert.match(await page.textContent("#details-list"), /Opened from\s*offline-checklist\.capsule\.html/);
 });
 
 await test("self-opening .capsule.html works from file:// and says where to verify it", async (page) => {
   await page.goto(`file://${selfOpening}`);
   await openScreen(page);
-  assert.equal(await page.textContent("#runtime-badge"), "Self-opening file");
   assert.ok(await page.$("#embedded-notice:not(.hidden)"));
   assert.match(await page.textContent("#trusted-cli-command"), /capsule inspect offline-checklist\.capsule\.html/);
   assert.ok(await page.$("#btn-another.hidden"));

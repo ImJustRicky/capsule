@@ -106,6 +106,13 @@ body {
 .hidden {
   display: none !important;
 }
+/* Screens are fixed-height flex columns. Without this, tall content makes
+ * every panel shrink and clips its contents (e.g. the hero's chip row)
+ * instead of scrolling. Elements that should flex (the iframe, the inspect
+ * body) opt back in with their own id-level `flex: 1`. */
+.screen > * {
+  flex-shrink: 0;
+}
 
 /* ---------- Top bar ---------- */
 

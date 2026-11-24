@@ -15,209 +15,178 @@
       content="default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; img-src data: blob:; media-src data: blob:; font-src data: blob:; connect-src 'self' https:; frame-src 'none'; worker-src 'none'; object-src 'none'; manifest-src 'none'; base-uri 'none'; form-action 'none'"
     />
     <meta name="referrer" content="no-referrer" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="color-scheme" content="light dark" />
     <title>Capsule</title>
     <style>
 /*__VIEWER_CSS__*/
     </style>
   </head>
   <body>
-    <div class="window-glow" aria-hidden="true"></div>
+    <header class="topbar" id="topbar">
+      <div class="wordmark">
+        <span class="mark" aria-hidden="true"></span>
+        <span>Capsule</span>
+      </div>
+      <span class="topbar-note">Runs in this tab · nothing uploaded</span>
+    </header>
 
+    <!-- Landing: open a capsule -->
     <main id="landing" class="screen hidden">
-      <nav class="topbar">
-        <div class="brand">
-          <span class="brand-pill" aria-hidden="true"><span class="brand-pill-half"></span><span class="brand-pill-half"></span></span>
-          <span class="brand-name">Capsule</span>
-        </div>
-        <div class="topbar-meta"><span class="runtime-badge">Browser runtime</span></div>
-      </nav>
-
-      <section class="landing-hero">
-        <h1 class="landing-title">Open a capsule</h1>
-        <p class="landing-lede">
-          A capsule is a small interactive app in a single file. It runs here in a locked-down
-          sandbox, and you see exactly what it can do before it runs.
+      <div class="column">
+        <h1 class="page-title">Open a capsule</h1>
+        <p class="page-lede">
+          A capsule is a small app in a single file. You’ll see exactly what it can do before it runs.
         </p>
-      </section>
 
-      <label id="drop-zone" class="drop-zone" for="file-input" tabindex="0">
-        <span class="drop-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
-        </span>
-        <span class="drop-title">Drop a capsule here, or click to choose one</span>
-        <span class="drop-sub">.capsule and self-opening .capsule.html files both work</span>
-      </label>
-      <input id="file-input" class="visually-hidden" type="file" accept=".capsule,.html,.htm,application/vnd.capsule+zip" />
-      <p class="privacy-note">Nothing is uploaded. The file is opened, checked and run inside this tab.</p>
+        <label id="drop-zone" class="drop-zone" for="file-input" tabindex="0">
+          <svg class="drop-icon" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 15V4m0 0L7.5 8.5M12 4l4.5 4.5M5 14v3.5A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5V14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span class="drop-title">Drop a capsule here</span>
+          <span class="drop-sub">.capsule or .capsule.html</span>
+          <span class="btn btn-primary btn-sm drop-btn">Choose a file</span>
+        </label>
+        <input id="file-input" class="visually-hidden" type="file" accept=".capsule,.html,.htm,application/vnd.capsule+zip" />
 
-      <section id="examples" class="panel hidden" aria-labelledby="examples-heading">
-        <header class="panel-header">
-          <h2 id="examples-heading" class="panel-title">Try an example</h2>
-          <span class="panel-sub">opens in this sandbox</span>
-        </header>
-        <ul id="example-list" class="example-list"></ul>
-      </section>
+        <section id="examples" class="examples hidden" aria-labelledby="examples-heading">
+          <h2 id="examples-heading" class="section-title">Try an example</h2>
+          <ul id="example-list" class="example-list"></ul>
+        </section>
 
-      <footer class="landing-footer">
-        <a href="https://github.com/ImJustRicky/capsule" target="_blank" rel="noopener noreferrer">What is Capsule?</a>
-        <span aria-hidden="true">·</span>
-        <span>Make one from any HTML page: <code>capsule make page.html --html</code></span>
-      </footer>
+        <p class="landing-footer">
+          Make one from any web page with <code>capsule make page.html --html</code>.
+          <a href="https://github.com/ImJustRicky/capsule" target="_blank" rel="noopener noreferrer">Learn more</a>
+        </p>
+      </div>
     </main>
 
+    <!-- Loading -->
     <main id="loading-screen" class="screen hidden" aria-busy="true">
-      <p class="loading-text" id="loading-text">Checking capsule…</p>
+      <div class="column center">
+        <span class="spinner" aria-hidden="true"></span>
+        <p class="muted" id="loading-text">Checking capsule…</p>
+      </div>
     </main>
 
+    <!-- Error -->
     <main id="error-screen" class="screen hidden">
-      <nav class="topbar">
-        <div class="brand">
-          <span class="brand-pill" aria-hidden="true"><span class="brand-pill-half"></span><span class="brand-pill-half"></span></span>
-          <span class="brand-name">Capsule</span>
-        </div>
-      </nav>
-      <section class="panel error-panel" role="alert">
-        <h1 class="error-title" id="error-title">This capsule can’t be opened</h1>
-        <p class="error-message" id="error-message"></p>
-        <p class="error-code" id="error-code"></p>
-        <div class="actions">
-          <button id="btn-error-back" type="button" class="btn">Open another capsule</button>
-        </div>
-      </section>
-    </main>
-
-    <main id="open-screen" class="screen hidden">
-      <nav class="topbar">
-        <div class="brand">
-          <span class="brand-pill" aria-hidden="true"><span class="brand-pill-half"></span><span class="brand-pill-half"></span></span>
-          <span class="brand-name">Capsule</span>
-        </div>
-        <div class="topbar-meta"><span id="runtime-badge" class="runtime-badge">Browser runtime</span></div>
-      </nav>
-
-      <article class="hero">
-        <div class="hero-icon" aria-hidden="true">
-          <svg viewBox="0 0 48 48" width="48" height="48">
-            <defs>
-              <linearGradient id="cap-grad" x1="0" y1="0" x2="1" y2="1">
-                <stop offset="0" stop-color="#9be7d3" />
-                <stop offset="1" stop-color="#31d3b8" />
-              </linearGradient>
-            </defs>
-            <rect x="6" y="6" width="36" height="36" rx="11" fill="url(#cap-grad)" />
-            <path d="M17 22 L22 27 L31 18" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-          </svg>
-        </div>
-        <div class="hero-body">
-          <h1 id="cap-name" class="hero-title">&nbsp;</h1>
-          <p id="cap-description" class="hero-description"></p>
-          <div class="hero-meta">
-            <span id="cap-version" class="chip"></span>
-            <span id="cap-author" class="chip chip-muted"></span>
-            <span id="cap-status" class="chip"></span>
-            <span id="cap-source" class="chip chip-muted"></span>
+      <div class="column">
+        <section class="card" role="alert">
+          <div class="error-icon" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 20 20"><path d="M10 6v5M10 13.6v.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="1.5" /></svg>
           </div>
-        </div>
-      </article>
-
-      <section id="embedded-notice" class="panel notice hidden" aria-labelledby="notice-heading">
-        <h2 id="notice-heading" class="panel-title">This viewer came inside the file</h2>
-        <p class="notice-body">
-          Self-opening capsules are convenient, but whoever made the file also made the viewer you are
-          looking at. If you don’t trust the sender, check it with a viewer you trust instead:
-          drop this file on <a id="trusted-viewer-link" target="_blank" rel="noopener noreferrer"></a>
-          or run <code id="trusted-cli-command"></code>.
-        </p>
-      </section>
-
-      <section class="panel" aria-labelledby="granted-heading">
-        <header class="panel-header">
-          <h2 id="granted-heading" class="panel-title">What this capsule can do</h2>
-          <span class="panel-sub" id="granted-count"></span>
-        </header>
-        <ul id="can-list" class="grant-list"></ul>
-      </section>
-
-      <section class="panel denied" aria-labelledby="denied-heading">
-        <header class="panel-header">
-          <h2 id="denied-heading" class="panel-title">Blocked by the runtime</h2>
-          <span class="panel-sub">enforced regardless of manifest</span>
-        </header>
-        <ul id="cannot-list" class="denied-grid"></ul>
-      </section>
-
-      <footer class="actions">
-        <button id="btn-inspect" type="button" class="btn"><span class="btn-label">Inspect</span></button>
-        <button id="btn-another" type="button" class="btn btn-ghost hidden"><span class="btn-label">Open another</span></button>
-        <button id="btn-run" type="button" class="btn btn-primary">
-          <span class="btn-label">Run once</span>
-          <svg class="btn-arrow" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <path d="M3 8 H12 M8 4 L12 8 L8 12" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-          </svg>
-        </button>
-      </footer>
+          <h1 class="card-title" id="error-title">This capsule can’t be opened</h1>
+          <p class="card-text" id="error-message"></p>
+          <p class="error-code" id="error-code"></p>
+          <button id="btn-error-back" type="button" class="btn btn-primary btn-block">Open a different capsule</button>
+        </section>
+      </div>
     </main>
 
-    <section id="run-screen" class="screen hidden">
+    <!-- Open Screen: what this capsule is and what it can do -->
+    <main id="open-screen" class="screen hidden">
+      <div class="column">
+        <section class="card" aria-labelledby="cap-name">
+          <div class="identity">
+            <div class="app-icon" id="cap-icon" aria-hidden="true"></div>
+            <div class="identity-text">
+              <h1 id="cap-name" class="app-name"></h1>
+              <div id="cap-byline" class="byline"></div>
+            </div>
+          </div>
+
+          <p id="cap-description" class="description"></p>
+
+          <div id="cap-status" class="status"></div>
+
+          <div class="perms">
+            <p class="perms-title" id="perms-title">This capsule can</p>
+            <ul id="can-list" class="can-list"></ul>
+            <p id="cant-text" class="cant"></p>
+          </div>
+
+          <div id="details" class="details hidden">
+            <dl id="details-list" class="details-list"></dl>
+          </div>
+
+          <button id="btn-run" type="button" class="btn btn-primary btn-block btn-lg">
+            <span id="btn-run-label" class="truncate">Run</span>
+          </button>
+          <div class="button-row">
+            <button id="btn-details" type="button" class="btn btn-outline" aria-expanded="false" aria-controls="details">Details</button>
+            <button id="btn-inspect" type="button" class="btn btn-outline">Inspect files</button>
+          </div>
+        </section>
+
+        <p id="embedded-notice" class="note hidden">
+          <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.4" /><path d="M8 7.2v4M8 4.9v.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" /></svg>
+          <span>
+            This is a self-opening file, so whoever sent it also made this screen. Not sure about them?
+            <a id="trusted-viewer-link" target="_blank" rel="noopener noreferrer">Check it with a viewer you trust</a>
+            or run <code id="trusted-cli-command"></code>.
+          </span>
+        </p>
+
+        <button id="btn-another" type="button" class="link-button hidden">Open a different capsule</button>
+      </div>
+    </main>
+
+    <!-- Running -->
+    <section id="run-screen" class="screen screen-full hidden">
       <div class="runbar">
-        <button id="btn-back" type="button" class="btn btn-ghost">
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <path d="M13 8 H4 M8 4 L4 8 L8 12" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-          </svg>
+        <button id="btn-back" type="button" class="btn btn-ghost btn-sm">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
           <span>Back</span>
         </button>
-        <span id="runbar-title" class="runbar-title"></span>
-        <span id="runbar-page" class="runbar-page"></span>
-        <span id="runbar-status" class="runbar-status">sandbox active</span>
+        <span id="runbar-title" class="runbar-title truncate"></span>
+        <span id="runbar-page" class="runbar-page truncate"></span>
+        <span id="runbar-status" class="runbar-status"><span class="dot" aria-hidden="true"></span>Sandboxed</span>
       </div>
       <div id="frame-host" class="frame-host"></div>
     </section>
 
-    <section id="inspect-screen" class="screen hidden">
-      <div class="runbar">
-        <button id="btn-inspect-back" type="button" class="btn btn-ghost">
-          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <path d="M13 8 H4 M8 4 L4 8 L8 12" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" fill="none" />
-          </svg>
+    <!-- Inspect -->
+    <main id="inspect-screen" class="screen hidden">
+      <div class="column column-wide">
+        <button id="btn-inspect-back" type="button" class="btn btn-ghost btn-sm back-inline">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
           <span>Back</span>
         </button>
-        <span class="runbar-title">Inspect</span>
-      </div>
-      <div class="inspect-body">
-        <section class="inspect-section">
-          <h2 class="inspect-heading">Integrity</h2>
+        <h1 class="page-title left" id="inspect-title">Inside this capsule</h1>
+
+        <section class="card inspect-card">
+          <h2 class="section-title">Integrity</h2>
           <dl id="inspect-integrity" class="kv"></dl>
         </section>
-        <section class="inspect-section">
-          <h2 class="inspect-heading">Files</h2>
+        <section class="card inspect-card">
+          <h2 class="section-title">Files</h2>
           <ul id="inspect-files" class="file-list"></ul>
         </section>
-        <section class="inspect-section">
-          <h2 class="inspect-heading">Activity this session</h2>
+        <section class="card inspect-card">
+          <h2 class="section-title">Activity this session</h2>
           <ul id="inspect-activity" class="activity-list"></ul>
         </section>
-        <section class="inspect-section">
-          <h2 class="inspect-heading">Manifest</h2>
-          <pre id="inspect-manifest" class="inspect-pre"></pre>
+        <section class="card inspect-card">
+          <h2 class="section-title">Manifest</h2>
+          <pre id="inspect-manifest" class="code-block"></pre>
         </section>
       </div>
-    </section>
+    </main>
 
-    <dialog id="permission-dialog">
-      <h3 id="perm-title">Capability request</h3>
-      <p id="perm-detail"></p>
+    <dialog id="permission-dialog" class="dialog">
+      <h2 id="perm-title" class="dialog-title">Allow?</h2>
+      <p id="perm-detail" class="dialog-text"></p>
       <div class="dialog-actions">
-        <button id="perm-deny" type="button" class="btn">Deny</button>
-        <button id="perm-allow" type="button" class="btn btn-primary">Allow once</button>
+        <button id="perm-deny" type="button" class="btn btn-outline">Don’t allow</button>
+        <button id="perm-allow" type="button" class="btn btn-primary">Allow</button>
       </div>
     </dialog>
 
-    <dialog id="gesture-dialog">
-      <h3 id="gesture-title">Continue?</h3>
-      <p id="gesture-detail"></p>
+    <dialog id="gesture-dialog" class="dialog">
+      <h2 id="gesture-title" class="dialog-title">Continue?</h2>
+      <p id="gesture-detail" class="dialog-text"></p>
       <div class="dialog-actions">
-        <button id="gesture-cancel" type="button" class="btn">Cancel</button>
+        <button id="gesture-cancel" type="button" class="btn btn-outline">Cancel</button>
         <button id="gesture-continue" type="button" class="btn btn-primary">Continue</button>
       </div>
     </dialog>

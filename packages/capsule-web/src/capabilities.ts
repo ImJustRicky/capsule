@@ -21,32 +21,63 @@ export const CAPABILITY_NAMES: readonly CapabilityName[] = [
   "dialog.open",
 ];
 
-export const CAPABILITY_LABELS: Record<CapabilityName, string> = {
-  "storage.local": "Save its own settings",
-  "filesystem.import": "Open files you pick",
-  "filesystem.export": "Save files you pick",
-  "clipboard.write": "Copy to clipboard",
-  "network.fetch": "Contact specific hosts",
-  "dialog.open": "Show host-mediated prompts",
+/**
+ * Plain-language wording for the Open Screen and permission prompts. People
+ * deciding whether to run something should never have to parse jargon like
+ * "host-mediated" or "scope".
+ */
+
+/** "This capsule can …" */
+export const CAPABILITY_CAN: Record<CapabilityName, string> = {
+  "storage.local": "Save its own data on this device",
+  "filesystem.import": "Open files you choose",
+  "filesystem.export": "Save files where you choose",
+  "clipboard.write": "Copy text to your clipboard",
+  "network.fetch": "Connect to specific websites",
+  "dialog.open": "Show pop-up messages",
 };
 
-export const CAPABILITY_SHORT: Record<CapabilityName, string> = {
-  "storage.local": "save its own settings",
-  "filesystem.import": "open files you pick",
-  "filesystem.export": "save files you pick",
-  "clipboard.write": "write to clipboard",
-  "network.fetch": "contact specific hosts",
-  "dialog.open": "show host prompts",
+/** "Allow <name> to …?" */
+export const CAPABILITY_ASK: Record<CapabilityName, string> = {
+  "storage.local": "save data on this device",
+  "filesystem.import": "open a file you choose",
+  "filesystem.export": "save a file where you choose",
+  "clipboard.write": "copy text to your clipboard",
+  "network.fetch": "connect to",
+  "dialog.open": "show pop-up messages",
 };
 
+/** Blocked no matter what the manifest says (shown under Details). */
 export const ALWAYS_DENIED: readonly string[] = [
-  "Run shell commands",
-  "Read your files",
+  "Run programs or shell commands",
+  "Read files you didn’t choose",
   "Read your clipboard",
-  "Update itself silently",
-  "Use camera, microphone, or location",
-  "Scan your local network",
+  "Update itself",
+  "Use your camera, microphone, or location",
+  "Reach devices on your local network",
 ];
+
+/** Hosts a network.fetch grant can actually reach: allowlisted, in scope, public. */
+export function reachableHosts(manifest: CapsuleManifest): string[] {
+  const declaration = declarationFor(manifest, "network.fetch");
+  if (!declaration) return [];
+  return manifest.network.allow.filter(
+    (h) => scopeCovers(declaration.scope, h) && !isLocalOrPrivateHost(h.replace(/:\d+$/, "")),
+  );
+}
+
+/** One plain sentence describing everything the capsule cannot do. */
+export function cannotSentence(manifest: CapsuleManifest): string {
+  const requested = new Set(manifest.permissions.map((p) => p.capability));
+  if (requested.size === 0) {
+    return "It runs entirely inside its own window: no internet, no saved data, and no access to your files, clipboard, or anything else on your computer.";
+  }
+  const parts: string[] = [];
+  parts.push(requested.has("network.fetch") ? "connect to any other website" : "use the internet");
+  parts.push(requested.has("filesystem.import") ? "see files you don’t choose" : "see your files");
+  parts.push("read your clipboard");
+  return `It can’t ${parts.join(", ")}, or reach anything else on your computer.`;
+}
 
 export class CapabilityError extends Error {
   readonly code: string;
@@ -231,11 +262,7 @@ export function sanitizeRequestHeaders(input: unknown): Record<string, string> {
  * that are both allowlisted and inside the network.fetch scope.
  */
 export function connectSrcFor(manifest: CapsuleManifest): string {
-  const declaration = declarationFor(manifest, "network.fetch");
-  if (!declaration) return "'none'";
-  const hosts = manifest.network.allow.filter(
-    (h) => scopeCovers(declaration.scope, h) && !isLocalOrPrivateHost(h.replace(/:\d+$/, "")),
-  );
+  const hosts = reachableHosts(manifest);
   if (hosts.length === 0) return "'none'";
   return hosts.map((h) => `https://${normalizeHost(h)}`).join(" ");
 }
