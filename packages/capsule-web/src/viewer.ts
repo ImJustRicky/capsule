@@ -1,11 +1,12 @@
 import { CapsuleError, base64ToBytes, type CapsuleManifest } from "@capsule/core/browser";
 import {
   ALWAYS_DENIED,
-  CAPABILITY_LABELS,
-  CAPABILITY_NAMES,
-  CAPABILITY_SHORT,
+  CAPABILITY_ASK,
+  CAPABILITY_CAN,
+  cannotSentence,
   connectSrcFor,
   isCapabilityName,
+  reachableHosts,
 } from "./capabilities.js";
 import { buildCapsuleDocument, dirnameOf, resolveArchiveRef } from "./document.js";
 import { CapabilityHost, isCapsuleRequest, type CapsuleReply, type HostUi } from "./host.js";
@@ -24,6 +25,7 @@ type Mode = "hosted" | "embedded";
 
 const MAX_DOWNLOAD_BYTES = 64 * 1024 * 1024;
 const SANDBOX_FLAGS = "allow-scripts allow-forms";
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 interface ViewerState {
   mode: Mode;
@@ -60,33 +62,62 @@ function show(id: string): void {
   for (const el of Array.from(document.querySelectorAll<HTMLElement>(".screen"))) {
     el.classList.toggle("hidden", el.id !== id);
   }
+  document.body.classList.toggle("running", id === "run-screen");
+  $(id).scrollTop = 0;
 }
 
 function visibleScreen(): string | undefined {
   return document.querySelector<HTMLElement>(".screen:not(.hidden)")?.id;
 }
 
-function svgIcon(inner: string): SVGSVGElement {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 20 20");
-  svg.setAttribute("width", "12");
-  svg.setAttribute("height", "12");
+function el<K extends keyof HTMLElementTagNameMap>(
+  tag: K,
+  className?: string,
+  text?: string,
+): HTMLElementTagNameMap[K] {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+/** Monochrome 16px line icon from one or more path strings ("|"-separated). */
+function icon(paths: string, size = 16): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 16 16");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
   svg.setAttribute("aria-hidden", "true");
-  for (const d of inner.split("|")) {
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  for (const d of paths.split("|")) {
+    const path = document.createElementNS(SVG_NS, "path");
     path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
     path.setAttribute("stroke", "currentColor");
-    path.setAttribute("stroke-width", "1.9");
+    path.setAttribute("stroke-width", "1.4");
     path.setAttribute("stroke-linecap", "round");
     path.setAttribute("stroke-linejoin", "round");
-    path.setAttribute("fill", "none");
     svg.appendChild(path);
   }
   return svg;
 }
-const ICON_CHECK = "M5 10 L9 14 L15 6";
-const ICON_X = "M6 6 L14 14|M14 6 L6 14";
-const ICON_DOT = "M10 9.5 L10 10.5";
+
+const ICONS = {
+  "storage.local": "M3.5 2.5h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z|M5.5 8h5",
+  "filesystem.import": "M8 13.5v-7M5 9.2l3-3 3 3|M3 2.5h10",
+  "filesystem.export": "M8 2.5v7M5 6.8l3 3 3-3|M3 12.5h10",
+  "clipboard.write": "M5.5 3.5h-1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1v-8a1 1 0 0 0-1-1h-1|M6 2.5h4v2H6z",
+  "network.fetch": "M8 1.8a6.2 6.2 0 1 0 0 12.4A6.2 6.2 0 0 0 8 1.8Z|M1.8 8h12.4|M8 1.8c1.7 1.8 2.4 3.9 2.4 6.2S9.7 12.4 8 14.2C6.3 12.4 5.6 10.3 5.6 8S6.3 3.6 8 1.8Z",
+  "dialog.open": "M2.5 4a1.5 1.5 0 0 1 1.5-1.5h8A1.5 1.5 0 0 1 13.5 4v5.5A1.5 1.5 0 0 1 12 11H7l-3 2.5V11a1.5 1.5 0 0 1-1.5-1.5Z",
+  verified: "M8 1.25a6.75 6.75 0 1 0 0 13.5 6.75 6.75 0 0 0 0-13.5Z|M5.3 8.2l1.8 1.8 3.6-3.8",
+  unsealed: "M8 1.25a6.75 6.75 0 1 0 0 13.5 6.75 6.75 0 0 0 0-13.5Z|M8 4.8v3.8|M8 11.1v.1",
+  chevron: "M6 3.5l4.5 4.5L6 12.5",
+} as const;
+
+/** First letter of the first word, for the flat app icon. */
+function initialOf(name: string): string {
+  const letter = Array.from(name.trim()).find((c) => /\p{L}|\p{N}/u.test(c));
+  return (letter ?? "•").toLocaleUpperCase();
+}
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -96,11 +127,11 @@ function formatBytes(n: number): string {
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 function toast(message: string): void {
-  const el = $("toast");
-  el.textContent = message;
-  el.classList.remove("hidden");
+  const node = $("toast");
+  node.textContent = message;
+  node.classList.remove("hidden");
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.add("hidden"), 6000);
+  toastTimer = setTimeout(() => node.classList.add("hidden"), 6000);
 }
 
 // ---------------------------------------------------------------------
@@ -114,12 +145,7 @@ function serialized<T>(task: () => Promise<T>): Promise<T> {
   return run;
 }
 
-function modal(
-  dialogId: string,
-  confirmId: string,
-  cancelId: string,
-  focusCancel: boolean,
-): Promise<boolean> {
+function modal(dialogId: string, confirmId: string, cancelId: string, focusCancel: boolean): Promise<boolean> {
   return new Promise((resolve) => {
     const dlg = $<HTMLDialogElement>(dialogId);
     const ok = $(confirmId);
@@ -154,20 +180,18 @@ function modal(
 const ui: HostUi = {
   promptPermission(capability, scope, reason) {
     return serialized(async () => {
-      const label = isCapabilityName(capability) ? CAPABILITY_LABELS[capability] : capability;
-      const short = isCapabilityName(capability) ? CAPABILITY_SHORT[capability] : capability;
-      $("perm-title").textContent = label;
-      $("perm-detail").textContent =
-        `${state.loaded?.manifest.name ?? "This capsule"} wants to ${short}${scope ? ` (${scope})` : ""}.` +
-        (reason ? `\n\nReason given by the author: ${reason}` : "");
+      const name = state.loaded?.manifest.name ?? "This capsule";
+      const ask = isCapabilityName(capability) ? CAPABILITY_ASK[capability] : capability;
+      $("perm-title").textContent = `Allow ${name} to ${ask}${scope ? ` ${scope}` : ""}?`;
+      $("perm-detail").textContent = reason ? `The author says: “${reason}”` : "";
       const allowed = await modal("permission-dialog", "perm-allow", "perm-deny", true);
       return allowed ? "granted" : "denied";
     });
   },
   requestGesture(message, actionLabel) {
     return serialized(async () => {
-      $("gesture-title").textContent = actionLabel.replace(/…$/, "");
-      $("gesture-detail").textContent = message;
+      $("gesture-title").textContent = message;
+      $("gesture-detail").textContent = "";
       $("gesture-continue").textContent = actionLabel;
       return modal("gesture-dialog", "gesture-continue", "gesture-cancel", false);
     });
@@ -193,7 +217,9 @@ async function openBytes(bytes: Uint8Array, sourceLabel: string): Promise<void> 
     state.host.record("open", { detail: sourceLabel });
     renderOpenScreen(loaded);
     show("open-screen");
-    $("btn-run").focus();
+    // Put keyboard focus on the main action without drawing a focus ring
+    // for mouse and touch users.
+    ($("btn-run") as HTMLElement & { focus(options?: { focusVisible?: boolean }): void }).focus({ focusVisible: false });
   } catch (err) {
     showError(err);
   }
@@ -229,34 +255,56 @@ async function openUrl(src: string): Promise<void> {
       cache: "no-store",
     });
     if (!response.ok) throw new Error(`The server answered ${response.status} ${response.statusText}.`);
-    const bytes = await readLimited(response, MAX_DOWNLOAD_BYTES);
+    const buffer = new Uint8Array(await response.arrayBuffer());
+    if (buffer.byteLength > MAX_DOWNLOAD_BYTES) {
+      throw new Error(`The file is larger than ${formatBytes(MAX_DOWNLOAD_BYTES)}.`);
+    }
     const label = sameOrigin ? decodeURIComponent(url.pathname.split("/").pop() ?? "capsule") : url.host;
-    await openBytes(bytes, label);
+    await openBytes(buffer, label);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     showError(
-      new Error(
-        `Couldn’t download ${url.toString()}.\n${message}\nThe server must allow cross-origin requests (CORS).`,
-      ),
+      new Error(`Couldn’t download ${url.toString()}.\n${message}\nThe server must allow cross-origin requests (CORS).`),
     );
   }
 }
 
-async function readLimited(response: Response, maxBytes: number): Promise<Uint8Array> {
-  const buffer = new Uint8Array(await response.arrayBuffer());
-  if (buffer.byteLength > maxBytes) throw new Error(`File is larger than ${formatBytes(maxBytes)}.`);
-  return buffer;
+/** Plain-language explanation for each family of error; the raw message stays as small print. */
+function explainError(code: string | null, message: string): { title: string; body: string } {
+  if (code === "integrity.mismatch") {
+    return {
+      title: "This capsule was changed after it was packed",
+      body: "Its contents don’t match the fingerprint its author sealed it with, so it won’t be run. Ask the sender for a fresh copy.",
+    };
+  }
+  if (code === "embed.missing") {
+    return {
+      title: "This page doesn’t contain a capsule",
+      body: "It’s an ordinary web page. Open a .capsule file or a self-opening .capsule.html instead.",
+    };
+  }
+  if (code?.startsWith("archive.") || code?.startsWith("path.") || code?.startsWith("embed.")) {
+    return {
+      title: "This file is damaged or isn’t a capsule",
+      body: "It may have been cut off or altered on the way to you, or it was never a capsule. Nothing from it was run. Ask the sender for a fresh copy.",
+    };
+  }
+  if (code?.startsWith("manifest.")) {
+    return {
+      title: "This capsule isn’t put together correctly",
+      body: "Its description file has a problem, so it can’t be checked safely and won’t be run. The author needs to fix and re-pack it.",
+    };
+  }
+  return { title: "This capsule can’t be opened", body: message };
 }
 
 function showError(err: unknown): void {
   const code = err instanceof CapsuleError ? err.code : null;
   const message = err instanceof Error ? err.message : String(err);
-  $("error-title").textContent =
-    code === "integrity.mismatch"
-      ? "This capsule was modified after it was packed"
-      : "This capsule can’t be opened";
-  $("error-message").textContent = message;
-  $("error-code").textContent = code ? `error: ${code}` : "";
+  const { title, body } = explainError(code, message);
+  $("error-title").textContent = title;
+  $("error-message").textContent = body;
+  $("error-code").textContent = code ? `${code} · ${message}` : "";
   $("btn-error-back").classList.toggle("hidden", state.mode === "embedded");
   show("error-screen");
 }
@@ -280,109 +328,87 @@ function openAnother(): void {
 function renderOpenScreen(loaded: LoadedCapsule): void {
   const m = loaded.manifest;
   document.title = `${m.name} · Capsule`;
+  $("cap-icon").textContent = initialOf(m.name);
   $("cap-name").textContent = m.name;
+  $("cap-byline").textContent = `${m.author?.name ?? "Unknown author"} · v${m.version}`;
   $("cap-description").textContent = m.description;
-  $("cap-version").textContent = `v${m.version}`;
-  $("cap-author").textContent = m.author?.name ? `by ${m.author.name}` : "unknown author";
+  $("btn-run-label").textContent = `Run ${m.name}`;
 
   const status = $("cap-status");
   status.replaceChildren();
-  status.className = "chip";
-  const dot = document.createElement("span");
-  dot.className = "chip-dot";
-  status.appendChild(dot);
   if (loaded.integrity.declared) {
-    status.classList.add("chip-ok");
-    status.appendChild(document.createTextNode("integrity verified"));
-    status.title = `content hash ${loaded.integrity.actual}`;
+    status.className = "status ok";
+    status.append(icon(ICONS.verified), document.createTextNode("Unchanged since it was packed"));
+    status.title = loaded.integrity.actual;
   } else {
-    status.classList.add("chip-unsigned");
-    status.appendChild(document.createTextNode("no declared hash"));
-    status.title = `computed ${loaded.integrity.actual}`;
+    status.className = "status unsealed";
+    status.append(icon(ICONS.unsealed), document.createTextNode("Not sealed by its author, so changes can’t be detected"));
+    status.title = loaded.integrity.actual;
   }
-  $("cap-source").textContent = state.sourceLabel ? `from ${state.sourceLabel}` : "";
-  $("cap-source").classList.toggle("hidden", !state.sourceLabel);
 
-  $("runtime-badge").textContent = state.mode === "embedded" ? "Self-opening file" : "Browser runtime";
-  const notice = $("embedded-notice");
-  notice.classList.toggle("hidden", state.mode !== "embedded");
-  if (state.mode === "embedded") {
+  renderPermissions(m);
+  renderDetails(loaded);
+  setDetailsOpen(false);
+
+  const embedded = state.mode === "embedded";
+  $("embedded-notice").classList.toggle("hidden", !embedded);
+  if (embedded) {
     const link = $<HTMLAnchorElement>("trusted-viewer-link");
     link.href = __HOSTED_VIEWER_URL__;
-    link.textContent = __HOSTED_VIEWER_URL__.replace(/^https:\/\//, "").replace(/\/$/, "");
     $("trusted-cli-command").textContent = `capsule inspect ${m.slug}.capsule.html`;
   }
-  $("btn-another").classList.toggle("hidden", state.mode === "embedded");
-
-  renderGranted(m);
-  renderDenied(m);
+  $("btn-another").classList.toggle("hidden", embedded);
 }
 
-function renderGranted(m: CapsuleManifest): void {
+function canPhrase(capability: CapsuleManifest["permissions"][number]["capability"], m: CapsuleManifest): string {
+  if (capability === "network.fetch") {
+    const hosts = reachableHosts(m);
+    if (hosts.length === 0) return "Connect to the internet (but no sites are allowed)";
+    if (hosts.length <= 2) return `Connect to ${hosts.join(" and ")}`;
+    return `Connect to ${hosts.length} specific websites`;
+  }
+  return CAPABILITY_CAN[capability];
+}
+
+function renderPermissions(m: CapsuleManifest): void {
   const list = $("can-list");
   list.replaceChildren();
-  if (m.permissions.length === 0) {
-    list.appendChild(
-      grantItem("Nothing. This capsule asks for no capabilities.", "It can only draw inside its own window.", null, true),
-    );
-    $("granted-count").textContent = "0 capabilities requested";
-    return;
-  }
-  $("granted-count").textContent =
-    `${m.permissions.length} ${m.permissions.length === 1 ? "capability" : "capabilities"} requested`;
+  const seen = new Set<string>();
   for (const p of m.permissions) {
-    const scope = Array.isArray(p.scope) ? p.scope.join(" · ") : p.scope;
-    list.appendChild(grantItem(CAPABILITY_LABELS[p.capability] ?? p.capability, p.reason, scope, false));
-  }
-}
-
-function grantItem(title: string, reason: string, scope: string | null, empty: boolean): HTMLLIElement {
-  const li = document.createElement("li");
-  li.className = "grant-item" + (empty ? " empty" : "");
-  const icon = document.createElement("span");
-  icon.className = "icon-wrap";
-  icon.appendChild(svgIcon(empty ? ICON_DOT : ICON_CHECK));
-  const body = document.createElement("div");
-  const label = document.createElement("span");
-  label.className = "grant-label";
-  label.textContent = title;
-  body.appendChild(label);
-  if (reason) {
-    const r = document.createElement("span");
-    r.className = "grant-reason";
-    r.textContent = reason;
-    body.appendChild(r);
-  }
-  const scopeEl = document.createElement("span");
-  if (scope) {
-    scopeEl.className = "grant-scope";
-    scopeEl.textContent = scope;
-  } else {
-    scopeEl.setAttribute("aria-hidden", "true");
-  }
-  li.append(icon, body, scopeEl);
-  return li;
-}
-
-function renderDenied(m: CapsuleManifest): void {
-  const list = $("cannot-list");
-  list.replaceChildren();
-  const requested = new Set(m.permissions.map((p) => p.capability));
-  const items = [
-    ...CAPABILITY_NAMES.filter((c) => !requested.has(c)).map((c) => CAPABILITY_SHORT[c]),
-    ...ALWAYS_DENIED,
-  ];
-  for (const label of items) {
-    const li = document.createElement("li");
-    li.className = "denied-item";
-    const icon = document.createElement("span");
-    icon.className = "icon-wrap";
-    icon.appendChild(svgIcon(ICON_X));
-    const text = document.createElement("span");
-    text.textContent = label.charAt(0).toUpperCase() + label.slice(1);
-    li.append(icon, text);
+    if (seen.has(p.capability)) continue;
+    seen.add(p.capability);
+    const li = el("li");
+    li.append(icon(ICONS[p.capability]), document.createTextNode(canPhrase(p.capability, m)));
     list.appendChild(li);
   }
+  $("perms-title").textContent = m.permissions.length ? "This capsule can" : "This capsule can’t reach anything";
+  $("cant-text").textContent = cannotSentence(m);
+}
+
+function renderDetails(loaded: LoadedCapsule): void {
+  const m = loaded.manifest;
+  const list = $("details-list");
+  list.replaceChildren();
+  const row = (term: string, value: string, mono = false) => {
+    const wrap = el("div");
+    wrap.append(el("dt", undefined, term), el("dd", mono ? "mono" : undefined, value));
+    list.appendChild(wrap);
+  };
+  for (const p of m.permissions) {
+    const scope = p.capability === "network.fetch" ? ` (${reachableHosts(m).join(", ") || "no sites"})` : "";
+    row(`${canPhrase(p.capability, m)}${p.capability === "network.fetch" ? "" : scope}`, `“${p.reason}”`);
+  }
+  row("Always blocked", ALWAYS_DENIED.join(" · "));
+  if (m.privacy?.summary) row("Privacy, in the author’s words", m.privacy.summary);
+  row("Opened from", state.sourceLabel || "unknown");
+  row("Fingerprint", loaded.integrity.actual, true);
+}
+
+function setDetailsOpen(open: boolean): void {
+  $("details").classList.toggle("hidden", !open);
+  const button = $("btn-details");
+  button.textContent = open ? "Hide details" : "Details";
+  button.setAttribute("aria-expanded", String(open));
 }
 
 // ---------------------------------------------------------------------
@@ -408,7 +434,6 @@ function runCapsule(): void {
   const loaded = state.loaded;
   if (!loaded || !state.host) return;
   lockNetwork(loaded.manifest);
-  $("btn-another").classList.toggle("hidden", state.mode === "embedded");
 
   stopCapsule();
   const frame = document.createElement("iframe");
@@ -448,15 +473,15 @@ function stopCapsule(): void {
   state.currentPage = null;
 }
 
+function backToOpenScreen(): void {
+  stopCapsule();
+  show("open-screen");
+}
+
 function navigate(href: unknown): void {
   const loaded = state.loaded;
   if (!loaded || typeof href !== "string" || !state.currentPage) return;
-  const target = resolveArchiveRef(
-    loaded.archive,
-    href,
-    dirnameOf(state.currentPage),
-    dirnameOf(loaded.manifest.entry),
-  );
+  const target = resolveArchiveRef(loaded.archive, href, dirnameOf(state.currentPage), dirnameOf(loaded.manifest.entry));
   if (!target || !/\.html?$/i.test(target)) {
     state.host?.record("deny", { detail: `navigate.not_found: ${href}` });
     toast(`This capsule has no page called “${href}”.`);
@@ -493,59 +518,41 @@ function wireBridge(): void {
 function openInspect(): void {
   const loaded = state.loaded;
   if (!loaded) return;
+  $("inspect-title").textContent = `Inside ${loaded.manifest.name}`;
+
   const integrity = $("inspect-integrity");
   integrity.replaceChildren();
   const rows: Array<[string, string]> = [
-    ["status", loaded.integrity.declared ? "declared hash matches content" : "no declared hash"],
-    ["computed", loaded.integrity.actual],
-    ["declared", loaded.integrity.declared ?? "(none)"],
-    ["archive", formatBytes(loaded.archiveBytes)],
+    ["status", loaded.integrity.declared ? "unchanged since it was packed" : "not sealed by its author"],
+    ["fingerprint", loaded.integrity.actual],
+    ["sealed as", loaded.integrity.declared ?? "(none)"],
+    ["archive size", formatBytes(loaded.archiveBytes)],
     ["opened from", state.sourceLabel || "(unknown)"],
   ];
-  for (const [k, v] of rows) {
-    const dt = document.createElement("dt");
-    dt.textContent = k;
-    const dd = document.createElement("dd");
-    dd.textContent = v;
-    integrity.append(dt, dd);
-  }
+  for (const [k, v] of rows) integrity.append(el("dt", undefined, k), el("dd", undefined, v));
 
   const files = $("inspect-files");
   files.replaceChildren();
   for (const entry of loaded.archive.entries
     .filter((e) => !e.isDirectory)
     .sort((a, b) => (a.path < b.path ? -1 : 1))) {
-    const li = document.createElement("li");
-    const size = document.createElement("span");
-    size.className = "file-size";
-    size.textContent = formatBytes(entry.uncompressedSize);
-    const name = document.createElement("span");
-    name.textContent = entry.path;
-    li.append(size, name);
+    const li = el("li");
+    li.append(el("span", "file-size", formatBytes(entry.uncompressedSize)), el("span", undefined, entry.path));
     files.appendChild(li);
   }
 
   const activity = $("inspect-activity");
   activity.replaceChildren();
   const receipts = state.host?.receipts ?? [];
-  if (receipts.length === 0) {
-    const li = document.createElement("li");
-    li.textContent = "(nothing yet)";
-    activity.appendChild(li);
-  }
+  if (receipts.length === 0) activity.appendChild(el("li", undefined, "Nothing yet."));
   for (const r of receipts) {
-    const li = document.createElement("li");
-    const time = document.createElement("span");
-    time.className = "activity-time";
-    time.textContent = new Date(r.ts).toLocaleTimeString();
-    const event = document.createElement("span");
-    event.className = `activity-event ${r.event}`;
-    event.textContent = r.event;
-    const detail = document.createElement("span");
-    detail.textContent = [r.capability && `${r.capability}.${r.method}`, r.scope, r.detail]
-      .filter(Boolean)
-      .join("  ");
-    li.append(time, event, detail);
+    const li = el("li");
+    const detail = [r.capability && `${r.capability}.${r.method}`, r.scope, r.detail].filter(Boolean).join("  ");
+    li.append(
+      el("span", "activity-time", new Date(r.ts).toLocaleTimeString()),
+      el("span", `activity-event ${r.event}`, r.event),
+      el("span", undefined, detail),
+    );
     activity.appendChild(li);
   }
 
@@ -582,20 +589,15 @@ async function loadExamples(): Promise<void> {
     for (const item of listing as ExampleListing[]) {
       if (!item || typeof item.file !== "string" || typeof item.name !== "string") continue;
       if (!/^[a-z0-9][a-z0-9.-]*\.capsule$/.test(item.file)) continue;
-      const li = document.createElement("li");
-      const a = document.createElement("a");
-      a.className = "example-link";
+      const a = el("a", "example-link");
       a.href = `?src=examples/${encodeURIComponent(item.file)}`;
-      const name = document.createElement("span");
-      name.className = "example-name";
-      name.textContent = item.name;
-      a.appendChild(name);
-      if (typeof item.description === "string") {
-        const desc = document.createElement("span");
-        desc.className = "example-desc";
-        desc.textContent = item.description;
-        a.appendChild(desc);
-      }
+      const text = el("span", "example-text");
+      text.appendChild(el("span", "example-name", item.name));
+      if (typeof item.description === "string") text.appendChild(el("span", "example-desc", item.description));
+      const chevron = el("span", "example-chevron");
+      chevron.appendChild(icon(ICONS.chevron));
+      a.append(el("span", "example-icon", initialOf(item.name)), text, chevron);
+      const li = el("li");
       li.appendChild(a);
       list.appendChild(li);
     }
@@ -652,13 +654,11 @@ function wireLanding(): void {
 function wireNav(): void {
   $("btn-run").addEventListener("click", runCapsule);
   $("btn-inspect").addEventListener("click", openInspect);
+  $("btn-details").addEventListener("click", () => setDetailsOpen($("details").classList.contains("hidden")));
   $("btn-another").addEventListener("click", openAnother);
   $("btn-error-back").addEventListener("click", openAnother);
   $("btn-inspect-back").addEventListener("click", () => show("open-screen"));
-  $("btn-back").addEventListener("click", () => {
-    stopCapsule();
-    show("open-screen");
-  });
+  $("btn-back").addEventListener("click", backToOpenScreen);
 
   window.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -675,8 +675,7 @@ function wireNav(): void {
       }
     } else if (e.key === "Escape" && (id === "run-screen" || id === "inspect-screen")) {
       e.preventDefault();
-      stopCapsule();
-      show("open-screen");
+      backToOpenScreen();
     }
   });
 }
