@@ -2,6 +2,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { packArchive, type CapsuleManifest, type PackFile } from "@capsule/core";
 import { defaultSharePath, writeSelfOpeningHtml } from "./share.js";
+import { displayPath } from "../display-path.js";
 
 type TemplateName = "blank" | "checklist" | "calculator";
 
@@ -596,9 +597,7 @@ function formatBytes(n: number): string {
 }
 
 function prettyPath(filePath: string): string {
-  const rel = path.relative(process.cwd(), filePath);
-  if (!rel || rel === "") return ".";
-  return rel.startsWith("..") ? filePath : rel;
+  return displayPath(filePath);
 }
 
 function shellPath(filePath: string): string {

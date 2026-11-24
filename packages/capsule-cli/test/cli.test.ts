@@ -238,6 +238,25 @@ describe("capsule CLI", () => {
     await expect(fs.stat(path.join(tmp, "tamper.capsule.html"))).rejects.toThrow();
   });
 
+  it("prints short paths even when the input path goes through a symlink (macOS /var → /private/var)", async () => {
+    // cwd is the real temp dir; reach the same files through a symlinked
+    // alias, the way macOS temp paths under /var/... alias /private/var/...
+    const alias = `${tmp}-alias`;
+    await fs.symlink(tmp, alias);
+    try {
+      await fs.writeFile(path.join(tmp, "page.html"), "<!doctype html><title>Linked Page</title>");
+      expect(await run(["make", path.join(alias, "page.html")])).toBe(0);
+      expect(stdout).toMatch(/^made linked-page\.capsule$/m);
+      expect(stdout).toMatch(/source:\s+page\.html$/m);
+
+      stdout = "";
+      expect(await run(["share", path.join(alias, "linked-page.capsule")])).toBe(0);
+      expect(stdout).toMatch(/^shared linked-page\.capsule\.html$/m);
+    } finally {
+      await fs.rm(alias, { force: true });
+    }
+  });
+
   it("share prints usage on bad arguments", async () => {
     expect(await run(["share"])).toBe(2);
     expect(await run(["share", "a.capsule", "--bogus"])).toBe(2);

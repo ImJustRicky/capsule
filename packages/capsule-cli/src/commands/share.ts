@@ -7,6 +7,7 @@ import {
   type CapsuleManifest,
 } from "@capsule/core";
 import { buildSelfOpeningHtml } from "@capsule/web";
+import { displayPath } from "../display-path.js";
 
 const USAGE = `usage: capsule share <file.capsule> [-o <out.capsule.html>] [--force]
 
@@ -109,9 +110,7 @@ function parseArgs(argv: string[]): ShareArgs {
 }
 
 function prettyPath(filePath: string): string {
-  const rel = path.relative(process.cwd(), filePath);
-  if (!rel) return ".";
-  return rel.startsWith("..") ? filePath : rel;
+  return displayPath(filePath);
 }
 
 function shellQuote(p: string): string {
