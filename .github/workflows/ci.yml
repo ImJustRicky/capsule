@@ -34,3 +34,31 @@ jobs:
       - run: pnpm -r typecheck
 
       - run: pnpm -r test
+
+  e2e:
+    name: browser end-to-end
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm -r build
+
+      # The e2e script resolves Playwright from the environment (NODE_PATH)
+      # rather than the lockfile, so the repo doesn't pin a browser build.
+      - name: Install Playwright and Chromium
+        run: |
+          npm install -g playwright@1.49.1
+          playwright install --with-deps chromium
+          echo "NODE_PATH=$(npm root -g)" >> "$GITHUB_ENV"
+
+      - run: pnpm --filter @capsule/web test:e2e

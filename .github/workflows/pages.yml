@@ -1,0 +1,61 @@
+name: Pages
+
+# Publishes the zero-install browser viewer, plus every example packed as
+# .capsule and self-opening .capsule.html, to GitHub Pages.
+#
+# One-time setup: repository Settings → Pages → Build and deployment →
+# Source: "GitHub Actions". Until then the deploy job fails with a clear
+# "Pages not enabled" error; nothing else depends on it.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Self-opening files link back to this site as "a viewer you trust".
+      # The build defaults to https://imjustricky.github.io/capsule/; forks
+      # should set CAPSULE_VIEWER_URL here to their own Pages URL.
+      - run: pnpm -r build
+
+      - name: Assemble site (viewer + packed examples)
+        run: node packages/capsule-web/scripts/build-site.mjs site
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
