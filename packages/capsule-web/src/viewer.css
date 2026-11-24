@@ -135,19 +135,9 @@ code {
   font-weight: 600;
   font-size: 15px;
 }
-.mark {
-  position: relative;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 2px solid currentColor;
-}
-.mark::after {
-  content: "";
-  position: absolute;
-  inset: 2px 2px 2px 50%;
-  border-radius: 0 99px 99px 0;
-  background: currentColor;
+.logo {
+  flex: none;
+  display: block;
 }
 .topbar-note {
   font-size: 13px;
