@@ -112,6 +112,10 @@ describe("runtime server", () => {
     expect(csp).toMatch(/default-src 'none'/);
     expect(csp).toMatch(/frame-src 'none'/);
     expect(csp).toMatch(/object-src 'none'/);
+    // Single-file apps with inline <script> must run (isolation is the
+    // sandbox + connect-src, not script-src). eval stays blocked.
+    expect(csp).toMatch(/script-src 'self' 'unsafe-inline'(;|$)/);
+    expect(csp).not.toMatch(/unsafe-eval/);
     expect(r.body).toContain(`/s/${session.token}/bridge.js`);
   });
 

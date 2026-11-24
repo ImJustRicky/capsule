@@ -6,6 +6,7 @@ import { create } from "./commands/create.js";
 import { verify } from "./commands/verify.js";
 import { run as runCmd } from "./commands/run.js";
 import { receipts } from "./commands/receipts.js";
+import { share } from "./commands/share.js";
 
 const USAGE = `capsule — reference CLI for the Capsule 1.0 format
 
@@ -13,9 +14,10 @@ Usage:
   capsule make <folder|slug>        create or package a capsule with friendly defaults
   capsule create <slug>             scaffold a new capsule project directory
   capsule pack <dir> [-o <out>]     pack a directory into <dir>.capsule
-  capsule inspect <file.capsule>    print manifest, files, integrity
-  capsule verify <file.capsule>     verify declared content_hash
-  capsule run <file.capsule>        open a capsule in a sandboxed runtime
+  capsule share <file.capsule>      make a self-opening .capsule.html that opens in any browser
+  capsule inspect <file>            print manifest, files, integrity (.capsule or .capsule.html)
+  capsule verify <file>             verify declared content_hash (.capsule or .capsule.html)
+  capsule run <file>                open a capsule in the local sandboxed runtime
   capsule receipts [--limit N]      print recent runtime receipts
   capsule help                      show this message
 `;
@@ -44,6 +46,8 @@ export async function run(argv: string[]): Promise<number> {
         return await runCmd(rest);
       case "receipts":
         return await receipts(rest);
+      case "share":
+        return await share(rest);
       default:
         process.stderr.write(`unknown command: ${cmd}\n\n${USAGE}`);
         return 2;

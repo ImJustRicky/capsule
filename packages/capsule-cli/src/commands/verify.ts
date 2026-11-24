@@ -3,7 +3,7 @@ import { loadCapsuleFromFile } from "@capsule/core";
 export async function verify(argv: string[]): Promise<number> {
   const [file] = argv;
   if (!file) {
-    process.stderr.write("usage: capsule verify <file.capsule>\n");
+    process.stderr.write("usage: capsule verify <file.capsule | file.capsule.html>\n");
     return 2;
   }
   const { integrity, manifest } = await loadCapsuleFromFile(file);

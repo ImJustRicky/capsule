@@ -3,11 +3,11 @@ import { loadCapsuleFromFile } from "@capsule/core";
 export async function inspect(argv: string[]): Promise<number> {
   const [file] = argv;
   if (!file) {
-    process.stderr.write("usage: capsule inspect <file.capsule>\n");
+    process.stderr.write("usage: capsule inspect <file.capsule | file.capsule.html>\n");
     return 2;
   }
 
-  const { manifest, archive, integrity } = await loadCapsuleFromFile(file);
+  const { manifest, archive, integrity, wrapped } = await loadCapsuleFromFile(file);
   const out = process.stdout;
 
   out.write(`${manifest.name} ${manifest.version}\n`);
@@ -22,6 +22,9 @@ export async function inspect(argv: string[]): Promise<number> {
   out.write(`  declared: ${integrity.declared ?? "(none)"}\n`);
   out.write(`  computed: ${integrity.actual}\n`);
   out.write(`  status:   ${integrity.declared ? (integrity.match ? "ok" : "MISMATCH") : "unsigned"}\n`);
+  if (wrapped) {
+    out.write("  wrapper:  self-opening .capsule.html (the embedded archive is what was checked)\n");
+  }
 
   out.write("\nCapabilities requested:\n");
   if (manifest.permissions.length === 0) {

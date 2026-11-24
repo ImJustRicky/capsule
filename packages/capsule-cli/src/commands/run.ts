@@ -3,7 +3,7 @@ import { runCapsule } from "@capsule/runtime";
 export async function run(argv: string[]): Promise<number> {
   const { file, headless, port } = parseArgs(argv);
   if (!file) {
-    process.stderr.write("usage: capsule run <file.capsule> [--port N] [--headless]\n");
+    process.stderr.write("usage: capsule run <file.capsule | file.capsule.html> [--port N] [--headless]\n");
     return 2;
   }
 

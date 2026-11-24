@@ -1,0 +1,329 @@
+/* Browser-viewer additions on top of the shared Open Screen styles
+ * (capsule-runtime/src/host/host.css is inlined first, so its tokens and
+ * components — panels, chips, buttons, dialogs — are reused as-is). */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+a {
+  color: var(--accent-soft);
+  text-underline-offset: 2px;
+}
+a:hover {
+  color: var(--accent);
+}
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--bg-elev-2);
+  box-shadow: 0 0 0 1px var(--border);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Landing ---------- */
+
+.landing-hero {
+  padding: 18px 2px 2px;
+}
+.landing-title {
+  margin: 0 0 6px;
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+.landing-lede {
+  margin: 0;
+  max-width: 58ch;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+
+.drop-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 190px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  border-radius: var(--radius-panel);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent),
+    var(--bg-elev);
+  box-shadow:
+    var(--shadow-panel),
+    0 0 0 1px var(--border-strong) inset;
+  outline: 1px dashed rgba(155, 231, 211, 0.28);
+  outline-offset: -10px;
+  transition-property: background-color, box-shadow, outline-color, transform;
+  transition-duration: 160ms;
+  transition-timing-function: var(--easing);
+}
+.drop-zone:hover,
+.drop-zone:focus-visible,
+.drop-zone.dragging {
+  outline-color: var(--accent);
+  box-shadow:
+    var(--shadow-panel),
+    0 0 0 1px var(--accent) inset,
+    0 0 0 4px var(--accent-weak);
+}
+.drop-zone:focus-visible {
+  outline-style: solid;
+}
+.drop-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  color: var(--accent);
+  background: var(--accent-weak);
+  box-shadow: 0 0 0 1px rgba(49, 211, 184, 0.3);
+}
+.drop-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.drop-sub {
+  font-size: 12.5px;
+  color: var(--fg-soft);
+}
+.privacy-note {
+  margin: -6px 2px 0;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+}
+
+.example-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.example-link {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px;
+  border-radius: var(--radius-panel-inner);
+  color: var(--fg);
+  text-decoration: none;
+  transition-property: background-color;
+  transition-duration: 160ms;
+  transition-timing-function: var(--easing);
+}
+.example-link:hover,
+.example-link:focus-visible {
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.03);
+  outline: none;
+}
+.example-name {
+  font-weight: 500;
+}
+.example-desc {
+  font-size: 12px;
+  color: var(--fg-soft);
+}
+
+.landing-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: auto;
+  padding-top: 8px;
+  font-size: 12.5px;
+  color: var(--fg-soft);
+}
+
+/* ---------- Loading / error ---------- */
+
+#loading-screen {
+  justify-content: center;
+  align-items: center;
+}
+.loading-text {
+  color: var(--fg-muted);
+}
+.error-panel {
+  margin-top: 8px;
+}
+.error-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+.error-message {
+  margin: 0;
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+.error-code {
+  margin: 8px 0 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--bad);
+}
+
+/* ---------- Open screen additions ---------- */
+
+.notice {
+  background:
+    linear-gradient(180deg, rgba(240, 188, 94, 0.06), transparent),
+    var(--bg-elev);
+  box-shadow:
+    var(--shadow-panel),
+    0 0 0 1px rgba(240, 188, 94, 0.25) inset;
+}
+.notice .panel-title {
+  color: var(--warn);
+  margin-bottom: 6px;
+}
+.notice-body {
+  margin: 0;
+  font-size: 13px;
+  color: var(--fg-muted);
+  text-wrap: pretty;
+}
+
+/* ---------- Run screen ---------- */
+
+.runbar-page {
+  font-size: 12px;
+  color: var(--fg-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.frame-host {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.frame-host iframe {
+  flex: 1;
+  width: 100%;
+  border: 0;
+  background: white;
+}
+
+/* ---------- Inspect ---------- */
+
+.inspect-body {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 24px 32px;
+  display: grid;
+  gap: 22px;
+  align-content: start;
+}
+.inspect-heading {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.kv dt {
+  color: var(--fg-soft);
+}
+.kv dd {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--fg-muted);
+  overflow-wrap: anywhere;
+}
+.file-list,
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--fg-muted);
+}
+.file-list li,
+.activity-list li {
+  display: grid;
+  grid-template-columns: 6.5em 1fr;
+  gap: 12px;
+}
+.activity-list li {
+  grid-template-columns: 6.5em 4.5em 1fr;
+}
+.file-size,
+.activity-time {
+  text-align: right;
+  color: var(--fg-soft);
+}
+.activity-event.grant {
+  color: var(--ok);
+}
+.activity-event.deny {
+  color: var(--bad);
+}
+.inspect-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--fg-muted);
+}
+
+/* ---------- Toast ---------- */
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100% - 32px));
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg-elev-2);
+  border-radius: var(--radius-btn);
+  box-shadow:
+    0 12px 40px -12px rgba(0, 0, 0, 0.7),
+    0 0 0 1px var(--border-strong);
+  z-index: 10;
+}
+
+@media (max-width: 720px) {
+  .file-list li {
+    grid-template-columns: 5em 1fr;
+  }
+  .activity-list li {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .file-size,
+  .activity-time {
+    text-align: left;
+  }
+}

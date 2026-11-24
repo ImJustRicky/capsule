@@ -227,9 +227,16 @@ async function serveCapsuleFile(
 
   // Capsule iframe CSP. connect-src is 'none' by design — the capsule never
   // talks to the network directly; it always goes through the host bridge.
+  //
+  // script-src allows 'unsafe-inline' so single-file apps (inline <script>
+  // and on* handlers, the usual output of AI tools) actually run. That grants
+  // no extra power: capsule code is untrusted by definition, so there is no
+  // "injected script" to defend against. Isolation comes from the
+  // opaque-origin sandbox plus connect-src 'none'. Kept in lockstep with the
+  // browser viewer's CAPSULE_DOCUMENT_CSP.
   const baseCsp = [
     "default-src 'none'",
-    "script-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "media-src 'self' data: blob:",

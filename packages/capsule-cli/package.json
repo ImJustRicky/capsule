@@ -7,7 +7,11 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "bin", "src"],
+  "files": [
+    "dist",
+    "bin",
+    "src"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -16,7 +20,8 @@
   },
   "dependencies": {
     "@capsule/core": "workspace:*",
-    "@capsule/runtime": "workspace:*"
+    "@capsule/runtime": "workspace:*",
+    "@capsule/web": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.16.11"

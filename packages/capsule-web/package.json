@@ -1,0 +1,36 @@
+{
+  "name": "@capsule/web",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Zero-install browser viewer for .capsule files, and the template for self-opening .capsule.html files.",
+  "main": "./dist/node.js",
+  "types": "./dist/node.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    },
+    "./viewer.html": "./dist/viewer.html"
+  },
+  "files": ["dist", "src", "scripts"],
+  "scripts": {
+    "gen": "node scripts/gen-validator.mjs",
+    "build": "node scripts/gen-validator.mjs && tsc -p tsconfig.node.json && node scripts/build.mjs",
+    "typecheck": "node scripts/gen-validator.mjs && tsc -p tsconfig.json --noEmit",
+    "test": "node scripts/gen-validator.mjs && vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "node test/e2e/run.mjs"
+  },
+  "dependencies": {
+    "@capsule/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@capsule/runtime": "workspace:*",
+    "@types/node": "^20.16.11",
+    "@types/yazl": "^2.4.5",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "esbuild": "0.21.5",
+    "yazl": "^3.3.1"
+  }
+}

@@ -26,6 +26,9 @@ importers:
       '@capsule/runtime':
         specifier: workspace:*
         version: link:../capsule-runtime
+      '@capsule/web':
+        specifier: workspace:*
+        version: link:../capsule-web
     devDependencies:
       '@types/node':
         specifier: ^20.16.11
@@ -65,6 +68,34 @@ importers:
       '@types/node':
         specifier: ^20.16.11
         version: 20.19.39
+
+  packages/capsule-web:
+    dependencies:
+      '@capsule/core':
+        specifier: workspace:*
+        version: link:../capsule-core
+    devDependencies:
+      '@capsule/runtime':
+        specifier: workspace:*
+        version: link:../capsule-runtime
+      '@types/node':
+        specifier: ^20.16.11
+        version: 20.19.39
+      '@types/yazl':
+        specifier: ^2.4.5
+        version: 2.4.6
+      ajv:
+        specifier: ^8.17.1
+        version: 8.18.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.18.0)
+      esbuild:
+        specifier: 0.21.5
+        version: 0.21.5
+      yazl:
+        specifier: ^3.3.1
+        version: 3.3.1
 
 packages:
 
